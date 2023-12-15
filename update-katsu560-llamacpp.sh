@@ -6,6 +6,325 @@
 
 MYNAME=update-katsu560-llamacpp.sh
 
+# common code, functions
+### return code/error code
+RET_TRUE=1              # TRUE
+RET_FALSE=0             # FALSE
+RET_OK=0                # OK
+RET_NG=1                # NG
+RET_YES=1               # YES
+RET_NO=0                # NO
+RET_CANCEL=2            # CANCEL
+
+ERR_USAGE=1             # usage
+ERR_UNKNOWN=2           # unknown error
+ERR_NOARG=3             # no argument
+ERR_BADARG=4            # bad argument
+ERR_NOTEXISTED=10       # not existed
+ERR_EXISTED=11          # already existed
+ERR_NOTFILE=12          # not file
+ERR_NOTDIR=13           # not dir
+ERR_CANTCREATE=14       # can't create
+ERR_CANTOPEN=15         # can't open
+ERR_CANTCOPY=16         # can't copy
+ERR_CANTDEL=17          # can't delete
+
+# set unique return code from 100
+ERR_NOTOPDIR=100        # no topdir
+ERR_NOBUILDDIR=101      # no build dir
+
+
+### flags
+VERBOSE=0               # -v --verbose flag, -v -v means more verbose
+NOEXEC=$RET_FALSE       # -n --noexec flag
+FORCE=$RET_FALSE        # -f --force flag
+NODIE=$RET_FALSE        # -nd --nodie
+NOCOPY=$RET_FALSE       # -ncp --nocopy
+NOTHING=
+
+###
+# https://qiita.com/ko1nksm/items/095bdb8f0eca6d327233
+# https://qiita.com/PruneMazui/items/8a023347772620025ad6
+# https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
+ESC=$(printf '\033')
+ESCRESET="${ESC}[0m"
+ESCBOLD="${ESC}[1m"
+ESCFAINT="${ESC}[2m"
+ESCITALIC="${ESC}[3m"
+ESCUL="${ESC}[4m"	# underline
+ESCBLINK="${ESC}[5m"	# slow blink
+ESCRBLINK="${ESC}[6m"	# rapid blink
+ESCREVERSE="${ESC}[7m"
+ESCCONCEAL="${ESC}[8m"
+ESCDELETED="${ESC}[9m"	# crossed-out
+ESCBOLDOFF="${ESC}[22m"	# bold off, faint off
+ESCITALICOFF="${ESC}[23m"  # italic off
+ESCULOFF="${ESC}[24m"	# underline off
+ESCBLINKOFF="${ESC}[25m"   # blink off
+ESCREVERSEOFF="${ESC}[27m" # reverse off
+ESCCONCEALOFF="${ESC}[28m" # conceal off
+ESCDELETEDOFF="${ESC}[29m" # deleted off
+ESCBLACK="${ESC}[30m"
+ESCRED="${ESC}[31m"
+ESCGREEN="${ESC}[32m"
+ESCYELLOW="${ESC}[33m"
+ESCBLUE="${ESC}[34m"
+ESCMAGENTA="${ESC}[35m"
+ESCCYAN="${ESC}[36m"
+ESCWHITEL="${ESC}[37m"
+ESCDEFAULT="${ESC}[38m"
+ESCBACK="${ESC}[m"
+
+ESCOK="$ESCGREEN"
+ESCERR="$ESCRED"
+ESCWARN="$ESCMAGENTA"
+ESCINFO="$ESCWHITE"
+
+xmsg()
+{
+	if [ $VERBOSE -ge 1 ]; then
+		echo "$MYNAME: $*"
+	fi
+}
+
+msg()
+{
+	echo "$MYNAME: $*"
+}
+
+die()
+{
+	local CODE
+
+	CODE=$1
+	shift
+	msg "$*"
+	if [ $NODIE -eq $RET_TRUE ]; then
+		xmsg "die: nodie"
+		return
+	fi
+	exit $CODE
+}
+
+nothing()
+{
+	NOTHING=
+}
+
+chk_and_cp()
+{
+	local chkfiles cpopt narg argfiles dstpath ncp cpfiles i
+
+	#xmsg "----"
+	#xmsg "chk_and_cp: $*"
+	#xmsg "chk_and_cp: nargs:$# args:$*"
+	if [ $# -eq 0 ]; then
+		msg "${ESCERR}chk_and_cp: no cpopt, chkfiles${ESCBACK}"
+		return $ERR_NOARG
+	fi
+
+	# get cp opt
+	cpopt=$1
+	shift
+	#xmsg "chk_and_cp: narg:$# args:$*"
+
+	if [ $# -le 1 ]; then
+		msg "${ESCERR}chk_and_cp: bad arg, not enough${ESCBACK}"
+		return $ERR_BADARG
+	fi
+
+	narg=$#
+	dstpath=`eval echo '${'$#'}'`
+	#xmsg "chk_and_cp: narg:$# dstpath:$dstpath"
+	if [ ! -d $dstpath ]; then
+		dstpath=
+	fi
+	argfiles="$*"
+	#xmsg "chk_and_cp: cpopt:$cpopt narg:$narg argfiles:$argfiles dstpath:$dstpath"
+
+	ncp=1
+	cpfiles=
+	for i in $argfiles
+	do
+		#xmsg "chk_and_cp: ncp:$ncp/$narg i:$i"
+		if [ $ncp -eq $narg ]; then
+			dstpath="$i"
+			break
+		fi
+
+		if [ -f $i ]; then
+			cpfiles="$cpfiles $i"
+		elif [ -d $i -a ! "x$i" = x"$dstpath" ]; then
+			cpfiles="$cpfiles $i"
+		else
+			msg "${ESCWARN}chk_and_cp: $i: can't add to cpfiles, ignore${ESCBACK}"
+			msg "ls -l $i"
+			ls -l $i
+		fi
+
+		ncp=`expr $ncp + 1`
+	done
+
+	#xmsg "chk_and_cp: cpopt:$cpopt ncp:$ncp cpfiles:$cpfiles dstpath:$dstpath"
+	if [ x"$cpfiles" = x ]; then
+		msg "${ESCERR}chk_and_cp: bad arg, no cpfiles${ESCBACK}"
+		return $ERR_BADARG
+	fi
+
+	if [ x"$dstpath" = x ]; then
+		msg "${ESCERR}chk_and_cp: bad arg, no dstpath${ESCBACK}"
+		return $ERR_BADARG
+	fi
+
+	if [ $ncp -eq 2 ]; then
+		if [ -f $cpfiles -a ! -e $dstpath ]; then
+			nothing
+		elif [ -f $cpfiles -a -f $dstpath -a $cpfiles = $dstpath ]; then
+			msg "${ESCERR}chk_and_cp: bad arg, same file${ESCBACK}"
+			return $ERR_BADARG
+		elif [ -d $cpfiles -a -f $dstpath ]; then
+			msg "${ESCERR}chk_and_cp: bad arg, dir to file${ESCBACK}"
+			return $ERR_BADARG
+		elif [ -f $cpfiles -a -f $dstpath ]; then
+			nothing
+		elif [ -f $cpfiles -a -d $dstpath ]; then
+			nothing
+		fi
+	elif [ ! -e $dstpath ]; then
+		msg "${ESCERR}chk_and_cp: not existed${ESCBACK}"
+		return $ERR_NOTEXISTED
+	elif [ ! -d $dstpath ]; then
+		msg "${ESCERR}chk_and_cp: not dir${ESCBACK}"
+		return $ERR_NOTDIR
+	fi
+
+	if [ $NOEXEC -eq $RET_FALSE ]; then
+		msg "cp $cpopt $cpfiles $dstpath"
+		cp $cpopt $cpfiles $dstpath || return $?
+	else
+		msg "${ESCWARN}noexec: cp $cpopt $cpfiles $dstpath${ESCBACK}"
+	fi
+
+	return $RET_OK
+}
+
+# chk_and_cp test code
+func_test()
+{
+	RETCODE=$?
+
+	OKCODE=$1
+	shift
+	TESTMSG="$*"
+
+	if [ $RETCODE -eq $OKCODE ]; then
+		msg "${ESCOK}test:OK${ESCBACK}: ret:$RETCODE expected:$OKCODE $TESTMSG"
+	else
+		msg "${ESCERR}${ESCBOLD}test:NG${ESCBOLDOFF}${ESCBACK}: ret:$RETCODE expected:$OKCODE ${ESCRED}$TESTMSG${ESCBACK}"
+	fi
+}
+
+test_chk_and_cp()
+{
+	# test files and dir, test-no.$$, testdir-no.$$: not existed
+	touch test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$
+	rm test-no.$$
+	mkdir testdir.$$
+	rmdir testdir-no.$$
+	ls -ld test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ test-no.$$ testdir.$$ testdir-no.$$
+	msg "test_chk_and_cp: create test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ test-no.$$ testdir.$$ testdir-no.$$"
+
+	# test code
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+
+	chk_and_cp
+	func_test $ERR_NOARG "no cpopt: chk_and_cp"
+
+	chk_and_cp -p
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p"
+
+	chk_and_cp -p test-no.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test-no.$$"
+	chk_and_cp -p test.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test.$$"
+	chk_and_cp -p testdir-no.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p testdir-no.$$"
+	chk_and_cp -p testdir.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p testdir.$$"
+
+	chk_and_cp -p test-no.$$ test-no.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test-no.$$ test-no.$$"
+	chk_and_cp -p test-no.$$ test.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test-no.$$ test.$$"
+	chk_and_cp -p test-no.$$ testdir-no.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test-no.$$ testdir-no.$$"
+	chk_and_cp -p test-no.$$ testdir.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test-no.$$ testdir.$$"
+
+	chk_and_cp -p test.$$ test-no.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-no.$$"
+	msg "ls test-no.$$"; ls -l test-no.$$; rm -rf test-no.$$
+	chk_and_cp -p test.$$ test-1.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$"
+	msg "ls test-1.$$"; ls -l test-1.$$
+	chk_and_cp -p test.$$ test.$$
+	func_test $ERR_BADARG "bad arg: chk_and_cp -p test.$$ test.$$"
+	chk_and_cp -p test.$$ testdir-no.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ testdir-no.$$"
+	msg "ls testdir-no.$$"; ls -l testdir-no.$$; rm -rf testdir-no.$$
+	chk_and_cp -p test.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+
+	chk_and_cp -p test.$$ test-no.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-no.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ testdir-no.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ testdir-no.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ testdir.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ testdir.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+	chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ testdir.$$
+	func_test $RET_OK "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ testdir.$$"
+	msg "ls testdir.$$"; ls -l testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
+
+
+	rm test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ test-no.$$
+	rm -rf testdir.$$ testdir-no.$$
+	ls -ld test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ test-no.$$ testdir.$$ testdir-no.$$
+	msg "test_chk_and_cp: rm test.$$ test-1.$$ test-2.$$ test-3.$$ test-4.$$ test-5.$$ test-6.$$ test-7.$$ test-8.$$ test-9.$$ test-10.$$ test-no.$$ testdir.$$ testdir-no.$$"
+}
+#msg "test_chk_and_cp"; VERBOSE=1; test_chk_and_cp; exit 0
+
+
+###
 TOPDIR=llama.cpp
 BUILDPATH="$TOPDIR/build"
 
@@ -14,19 +333,25 @@ OPENBLAS=`grep -sr LLAMA_OPENBLAS $TOPDIR/CMakeLists.txt | sed -z -e 's/\n//g' -
 BLAS=`grep -sr LLAMA_BLAS $TOPDIR/CMakeLists.txt | sed -z -e 's/\n//g' -e 's/.*LLAMA_BLAS.*/LLAMA_BLAS/'`
 if [ ! x"$OPENBLAS" = x ]; then
 	# old CMakeLists.txt
-	LLAMA_OPENBLAS="LLAMA_OPENBLAS"
+	LLAMA_OPENBLAS="-DLLAMA_OPENBLAS=ON"
 	BLASVENDOR=""
 	echo "# use LLAMA_OPENBLAS=$LLAMA_OPENBLAS BLASVENDOR=$BLASVENDOR"
+else
+	LLAMA_OPENBLAS=
 fi
 if [ ! x"$BLAS" = x ]; then
 	# new CMakeLists.txt from 2023.6
-	LLAMA_OPENBLAS="LLAMA_BLAS"
+	LLAMA_OPENBLAS="-DLLAMA_BLAS=ON"
 	BLASVENDOR="-DLLAMA_BLAS_VENDOR=OpenBLAS"
 	echo "# use LLAMA_OPENBLAS=$LLAMA_OPENBLAS BLASVENDOR=$BLASVENDOR"
 fi
-CMKOPTNOAVX="-DLLAMA_AVX=OFF -DLLAMA_AVX2=OFF -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=OFF -DLLAMA_F16C=OFF -D$LLAMA_OPENBLAS=OFF -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
-CMKOPTAVX="-DLLAMA_AVX=ON -DLLAMA_AVX2=OFF -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=OFF -DLLAMA_F16C=ON -D$LLAMA_OPENBLAS=ON $BLASVENDOR -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
-CMKOPTAVX2="-DLLAMA_AVX=ON -DLLAMA_AVX2=ON -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=ON -DLLAMA_F16C=ON -D$LLAMA_OPENBLAS=ON $BLASVENDOR -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
+CMKOPTBLAS="$LLAMA_OPENBLAS $BLASVENDOR"
+CMKOPTNOAVX="-DLLAMA_AVX=OFF -DLLAMA_AVX2=OFF -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=OFF -DLLAMA_F16C=OFF $CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
+CMKOPTAVX="-DLLAMA_AVX=ON -DLLAMA_AVX2=OFF -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=OFF -DLLAMA_F16C=ON $CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
+CMKOPTAVX2="-DLLAMA_AVX=ON -DLLAMA_AVX2=ON -DLLAMA_AVX512=OFF -DLLAMA_AVX512_VBMI=OFF -DLLAMA_AVX512_VNNI=OFF -DLLAMA_FMA=ON -DLLAMA_F16C=ON $CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
+CMKOPTNONE="$CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_EXAMPLES=ON"
+CMKOPT="$CMKOPTNONE"
+
 TESTOPT="GGML_NLOOP=1 GGML_NTHREADS=4"
 #TESTS="test-quantize-fns test-quantize-perf test-sampling test-tokenizer-0"
 #TESTS="test-quantize-fns test-quantize-perf test-sampling test-tokenizer-0 test-grad0"
@@ -49,7 +374,7 @@ do
 done
 ALLBINSUP="main quantize quantize-stats perplexity embedding save-load-state"
 ALLBINS="main quantize quantize-stats perplexity embedding save-load-state benchmark vdot q8dot"
-BINSDIR="baby-llama batched beam-search export-lora finetune parallel server simple speculative batched-bench llava"
+BINSDIR="baby-llama batched beam-search export-lora finetune parallel server simple speculative batched-bench llava tokenize lookahead"
 NOBINS="gguf llama-bench infill"
 for i in $BINSDIR
 do
@@ -66,200 +391,19 @@ do
 	fi
 done
 
-CMKOPT=""
+# default -avx
+CMKOPT="$CMKOPTAVX"
 CMKOPT2=""
 
 MKCLEAN=0
-NODIE=0
 NOCLEAN=0
-NOCOPY=0
-
-# https://qiita.com/ko1nksm/items/095bdb8f0eca6d327233
-ESC=$(printf '\033')
-ESCBLACK="${ESC}[30m"
-ESCRED="${ESC}[31m"
-ESCGREEN="${ESC}[32m"
-ESCYELLOW="${ESC}[33m"
-ESCBLUE="${ESC}[34m"
-ESCMAGENTA="${ESC}[35m"
-ESCCYAN="${ESC}[36m"
-ESCWHITEL="${ESC}[37m"
-ESCDEFAULT="${ESC}[38m"
-ESCBACK="${ESC}[m"
-ESCRESET="${ESC}[0m"
-
-msg()
-{
-	echo "$MYNAME: $*"
-}
-
-die()
-{
-	CODE=$1
-	shift
-	msg "${ESCRED}$*${ESCBACK}"
-	if [ $NODIE = 0 ]; then
-		exit $CODE
-	fi
-}
-
-chk_and_cp()
-{
-	#msg "chk_and_cp: nargs:$# args:$*"
-        chkfiles="$*"
-        if [ x"$chkfiles" = x ]; then
-                msg "chk_and_cp: no cpopt"
-                return 1
-        fi
-
-	# get cp opt
-        cpopt=$1
-        shift
-	#msg "chk_and_cp: n:$# args:$*"
-
-        chkfiles="$*"
-	ncp=$#
-	dstdir=
-	if [ $# -ge 2 ]; then
-		dstdir=`eval echo '$'$#`
-		if [ ! -d $dstdir ]; then
-			dstdir=
-		fi
-	fi
-	#msg "chk_and_cp: cpopt:$cpopt ncp:$ncp chkfiles:$chkfiles dstdir:$dstdir"
-
-        cpfiles=
-        for i in $chkfiles
-        do
-		#msg "chk_and_cp: ncp:$ncp i:$i"
-		if [ $ncp -le 1 ]; then
-			break
-		fi
-
-		if [ -f $i ]; then
-			cpfiles="$cpfiles $i"
-		elif [ -d $i -a ! "x$i" = x"$dstdir" ]; then
-			cpfiles="$cpfiles $i"
-		fi
-	
-		ncp=`expr $ncp - 1`
-	done
-
-	#msg "chk_and_cp: cpopt:$cpopt ncp:$ncp cpfiles:$cpfiles dstdir:$dstdir"
-	if [ x"$cpfiles" = x ]; then
-		msg "chk_and_cp: no cpfiles"
-		return 2
-	fi
-
-	if [ x"$dstdir" = x ]; then
-		msg "chk_and_cp: no dstdir"
-		return 3
-	elif [ ! -d $dstdir ]; then
-		msg "chk_and_cp: not dir"
-		return 4
-	fi
-
-        msg "cp $cpopt $cpfiles $dstdir"
-        cp $cpopt $cpfiles $dstdir || return 2
-
-        return 0
-}
-
-# chk_and_cp test code
-func_test()
-{
-	RETCODE=$?
-
-	OKCODE=$1
-	shift
-	TESTMSG="$*"
-
-	if [ $RETCODE -eq $OKCODE ]; then
-		msg "ret:$RETCODE expected:$OKCODE $TESTMSG"
-	else
-		msg "ret:$RETCODE expected:$OKCODE ${ESCRED}$TESTMSG${ESCBACK}"
-	fi
-}
-
-test_chk_and_cp()
-{
-	# test files and dir, test-0.$$, testdir-0.$$: not existed
-	touch test.$$ test-1.$$ test-2.$$
-	mkdir testdir.$$
-	ls -ld test.$$ test-1.$$ test-2.$$ testdir.$$
-	msg "test_chk_and_cp: create test.$$ test-1.$$ test-2.$$ testdir.$$"
-
-	# test code
-	chk_and_cp
-	func_test 1 "no cpopt: chk_and_cp"
-
-	chk_and_cp -p
-	func_test 2 "no cpfiles: chk_and_cp -p"
-
-	chk_and_cp -p test-0.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test-0.$$"
-	chk_and_cp -p test.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test.$$"
-	chk_and_cp -p testdir-0.$$
-	func_test 2 "no cpfiles: chk_and_cp -p testdir-0.$$"
-	chk_and_cp -p testdir.$$
-	func_test 2 "no cpfiles: chk_and_cp -p testdir.$$"
-
-	chk_and_cp -p test-0.$$ test-0.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test-0.$$ test-0.$$"
-	chk_and_cp -p test-0.$$ test.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test-0.$$ test.$$"
-	chk_and_cp -p test-0.$$ testdir-0.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test-0.$$ testdir-0.$$"
-	chk_and_cp -p test-0.$$ testdir.$$
-	func_test 2 "no cpfiles: chk_and_cp -p test-0.$$ testdir.$$"
-
-	chk_and_cp -p test.$$ test-0.$$
-	func_test 3 "no dstdir: chk_and_cp -p test.$$ test-0.$$"
-	chk_and_cp -p test.$$ test.$$
-	func_test 3 "no dstdir: chk_and_cp -p test.$$ test.$$"
-	chk_and_cp -p test.$$ test-1.$$
-	func_test 3 "no dstdir: chk_and_cp -p test.$$ test-1.$$"
-	chk_and_cp -p test.$$ testdir-0.$$
-	func_test 3 "no dstdir: chk_and_cp -p test.$$ testdir-0.$$"
-	chk_and_cp -p test.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-
-	chk_and_cp -p test.$$ test-0.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ test-0.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-	chk_and_cp -p test.$$ test.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ test.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-	chk_and_cp -p test.$$ test-1.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ test-1.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-	chk_and_cp -p test.$$ testdir-0.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ testdir-0.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-	chk_and_cp -p test.$$ testdir.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ testdir.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-
-	chk_and_cp -p test.$$ test-1.$$ test-2.$$ testdir.$$
-	func_test 0 "ok: chk_and_cp -p test.$$ test-1.$$ test-2.$$ testdir.$$"
-	msg "ls testdir.$$"; ls testdir.$$; rm -rf testdir.$$; mkdir testdir.$$
-
-
-	rm test.$$ test-1.$$ test-2.$$
-	rm -rf testdir.$$
-	ls -ld test.$$ test-1.$$ test-2.$$ testdir.$$
-	msg "test_chk_and_cp: rm test.$$ test-1.$$ test-2.$$ testdir.$$"
-}
-#msg "test_chk_and_cp"; test_chk_and_cp; exit 0
 
 usage()
 {
 	echo "usage: $MYNAME [-h][-nd][-nc][-up][-noavx|-avx|-avx2][-qkk64] dirname branch cmd"
-        echo "-h|--help ... this message"
-        echo "-nd|--nodie ... no die"
-        echo "-nc|--noclean ... no make clean"
+	echo "-h|--help ... this message"
+	echo "-nd|--nodie ... no die"
+	echo "-nc|--noclean ... no make clean"
 	echo "-up ... upstream, no mod source, skip benchmark-matmult"
 	echo "-noavx|-avx|-avx2 ... set cmake option for no AVX, AVX, AVX2"
 	echo "-qkk64 ... add cmake option for QKK_64"
@@ -274,25 +418,27 @@ usage()
 ###
 if [ x"$1" = x -o $# -lt 3 ]; then
 	usage
-	exit 1
+	exit $ERR_USAGE
 fi
 
 ALLOPT="$*"
-OPTLOOP=1
-while [ $OPTLOOP -eq 1 ];
+OPTLOOP=$RET_TRUE
+while [ $OPTLOOP -eq $RET_TRUE ];
 do
 	case $1 in
-	-h|--help)	usage; exit 1;;
-	-nd|--nodie)	NODIE=1;;
-	-nc|--noclean)	NOCLEAN=1;;
-	-ncp|--nocopy)	NOCOPY=1;;
+	-h|--help)	usage; exit $ERR_USAGE;;
+	-v|--verbose)   VERBOSE=`expr $VERBOSE + 1`;;
+	-n|--noexec)    NOEXEC=$RET_TRUE;;
+	-nd|--nodie)	NODIE=$RET_TRUE;;
+	-ncp|--nocopy)	NOCOPY=$RET_TRUE;;
+	-nc|--noclean)	NOCLEAN=$RET_TRUE;;
 	-up)		ALLBINS="$ALLBINSUP";;
 	-noavx)		CMKOPT="$CMKOPTNOAVX";;
 	-avx)		CMKOPT="$CMKOPTAVX";;
 	-avx2)		CMKOPT="$CMKOPTAVX2";;
 	-qkk64)		CMKOPT2="-DLLAMA_QKK_64=ON";;
-	-s|-seed) shift; SEEDOPT=$1;;
-	*)		OPTLOOP=0; break;;
+	-s|-seed)	shift; SEEDOPT=$1;;
+	*)		OPTLOOP=$RET_FALSE; break;;
 	esac
 	shift
 done
@@ -312,14 +458,14 @@ do_sync()
 	# in build
 
 	msg "# synchronizing ..."
-        msg "git branch"
-        git branch
-        msg "git checkout $BRANCH"
-        git checkout $BRANCH
-        msg "git fetch"
-        git fetch
-        msg "git reset --hard origin/master"
-        git reset --hard origin/master
+	msg "git branch"
+	git branch
+	msg "git checkout $BRANCH"
+	git checkout $BRANCH
+	msg "git fetch"
+	git fetch
+	msg "git reset --hard origin/master"
+	git reset --hard origin/master
 }
 
 do_cp()
@@ -328,11 +474,11 @@ do_cp()
 
 	msg "# copying ..."
 	#msg "cp -p ../ggml.[ch] ../k_quants.[ch] ../ggml-alloc.h ../ggml-alloc.c ../ggml-opencl.h ../ggml-opencl.cpp ../llama.cpp ../llama.h ../llama-*.h ../CMakeLists.txt ../Makefile $DIRNAME"
-	chk_and_cp -p ../ggml.[ch] ../k_quants.[ch] ../ggml-alloc.h ../ggml-alloc.c ../ggml-opencl.h ../ggml-opencl.cpp ../llama.cpp ../llama.h ../llama-*.h ../CMakeLists.txt ../Makefile $DIRNAME || die 21 "can't copy files"
+	chk_and_cp -p ../ggml.[ch] ../k_quants.[ch] ../ggml-alloc.h ../ggml-alloc.c ../ggml-opencl.h ../ggml-opencl.cpp ../llama.cpp ../llama.h ../llama-*.h ../CMakeLists.txt ../Makefile $DIRNAME || die 201 "can't copy files"
 	#msg "cp -pr ../examples $DIRNAME"
-	chk_and_cp -pr ../examples $DIRNAME || die 22 "can't copy examples files"
+	chk_and_cp -pr ../examples $DIRNAME || die 202 "can't copy examples files"
 	#msg "cp -pr ../tests $DIRNAME"
-	chk_and_cp -pr ../tests $DIRNAME || die 23 "can't copy tests files"
+	chk_and_cp -pr ../tests $DIRNAME || die 203 "can't copy tests files"
 	find $DIRNAME -name '*.[0-9][0-9][0-9][0-9]*' -exec rm {} \;
 }
 
@@ -344,7 +490,7 @@ do_cmk()
 	msg "rm CMakeCache.txt"
 	rm CMakeCache.txt
 	msg "cmake .. $CMKOPT"
-	cmake .. $CMKOPT || die 31 "cmake failed"
+	cmake .. $CMKOPT || die 301 "cmake failed"
 	#msg "cp -p Makefile $DIRNAME/Makefile.build"
 	chk_and_cp -p Makefile $DIRNAME/Makefile.build
 }
@@ -354,17 +500,17 @@ do_test()
 	# in build
 
 	msg "# testing ..."
-        if [ $MKCLEAN = 0 -a $NOCLEAN = 0 ]; then
-                MKCLEAN=1
-                msg "make clean"
-                make clean || die 41 "make clean failed"
-        fi
+	if [ $MKCLEAN -eq $RET_FALSE -a $NOCLEAN -eq $RET_FALSE ]; then
+		msg "make clean"
+		make clean || die 401 "make clean failed"
+		MKCLEAN=$RET_TRUE
+	fi
 	msg "make $TESTS"
-	make $TESTS || die 42 "make test build failed"
+	make $TESTS || die 402 "make test build failed"
 	#msg "cp -p bin/test* $DIRNAME/"
-	chk_and_cp -p bin/test* $DIRNAME || die 43 "can't cp tests"
+	chk_and_cp -p bin/test* $DIRNAME || die 403 "can't cp tests"
 	msg "env $TESTOPT make test"
-	env $TESTOPT make test || die 44 "make test failed"
+	env $TESTOPT make test || die 404 "make test failed"
 }
 
 do_main()
@@ -377,16 +523,16 @@ do_main()
 	msg "# executing main ... (MAINOPT:$MAINOPT SUBOPT:$SUBOPT)"
 	# make main
 	if [ ! x"$MAINOPT" = xNOMAKE ]; then
-                if [ $MKCLEAN = 0 -a $NOCLEAN = 0 ]; then
-                        MKCLEAN=1
-                        msg "make clean"
-                        make clean || die 51 "make clean failed"
-                fi
+		if [ $MKCLEAN -eq $RET_FALSE -a $NOCLEAN -eq $RET_FALSE ]; then
+			msg "make clean"
+			make clean || die 501 "make clean failed"
+			MKCLEAN=$RET_TRUE
+		fi
 		msg "make $ALLBINS"
-		make $ALLBINS || die 52 "make main failed"
+		make $ALLBINS || die 502 "make main failed"
 		BINTESTS=""; for i in $ALLBINS ;do BINTESTS="$BINTESTS bin/$i" ;done
-		msg "cp -p $BINTESTS $DIRNAME/"
-		cp -p $BINTESTS $DIRNAME || die 53 "can't cp main"
+		#msg "cp -p $BINTESTS $DIRNAME/"
+		chk_and_cp -p $BINTESTS $DIRNAME || die 503 "can't cp main"
 	fi
 	# main
 	PROMPT="Building a website can be done in 10 simple steps:"
@@ -515,16 +661,14 @@ sudo ntpdate ntp.nict.jp
 
 # check
 if [ ! -d $TOPDIR ]; then
-        msg "# can't find $TOPDIR, exit"
-        exit 2
+	die $ERR_NOTOPDIR "# can't find $TOPDIR, exit"
 fi
 if [ ! -d $BUILDPATH ]; then
-        msg "mkdir -p $BUILDPATH"
-        mkdir -p $BUILDPATH
-        if [ ! -d $BUILDPATH ]; then
-                msg "# can't find $BUILDPATH, exit"
-                exit 3
-        fi
+	msg "mkdir -p $BUILDPATH"
+	mkdir -p $BUILDPATH
+	if [ ! -d $BUILDPATH ]; then
+		die $ERR_NOBUILDDIR "# can't find $BUILDPATH, exit"
+	fi
 fi
 
 msg "cd $BUILDPATH"
@@ -538,8 +682,7 @@ git checkout $BRANCH
 msg "mkdir $DIRNAME"
 mkdir $DIRNAME
 if [ ! -e $DIRNAME ]; then
-        msg "no directory: $DIRNAME"
-        exit 11
+	die $ERR_NOTEXISTED "no directory: $DIRNAME"
 fi
 
 case $CMD in
@@ -572,7 +715,7 @@ case $CMD in
 *mainggufonly*)	do_main NOMAKE GGUF;;
 *ggufonly*)	do_main NOMAKE GGUF;;
 *main*)		do_main;;
-*)	msg "no make main";;
+*)		msg "no make main";;
 esac
 
 msg "# done."
