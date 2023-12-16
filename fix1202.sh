@@ -285,286 +285,38 @@ git branch
 #
 # do_cp target origin(master) modified(gq)
 RESULT=0
-# n:1 llama.cpp/CMakeLists.txt
-# n:1 llama.cpp/CMakeLists.txt
-# n:1 llama.cpp/CMakeLists.txt
 do_cp CMakeLists.txt	CMakeLists.txt.1202	CMakeLists.txt.1202mod
-# n:-1 llama.cpp/CMakeLists.txt.1202
-# n:-1 llama.cpp/CMakeLists.txt.1202
-# n:-1 llama.cpp/CMakeLists.txt.1202
-# n:1 llama.cpp/Makefile
-# n:1 llama.cpp/Makefile
-# n:1 llama.cpp/Makefile
 do_cp Makefile	Makefile.1202	Makefile.1202mod
-# n:-1 llama.cpp/Makefile.1202
-# n:-1 llama.cpp/Makefile.1202
-# n:-1 llama.cpp/Makefile.1202
-# n:1 llama.cpp/ggml.h
-# n:1 llama.cpp/ggml.h
-# n:1 llama.cpp/ggml.h
 do_cp ggml.h	ggml.h.1202	ggml.h.1202mod
-# n:-1 llama.cpp/ggml.h.1202
-# n:-1 llama.cpp/ggml.h.1202
-# n:-1 llama.cpp/ggml.h.1202
-# n:1 llama.cpp/ggml.c
-# n:1 llama.cpp/ggml.c
-# n:1 llama.cpp/ggml.c
 do_cp ggml.c	ggml.c.1202	ggml.c.1202mod
-# n:-1 llama.cpp/ggml.c.1202
-# n:-1 llama.cpp/ggml.c.1202
-# n:-1 llama.cpp/ggml.c.1202
-# n:1 llama.cpp/ggml-opencl.h
-# n:1 llama.cpp/ggml-opencl.h
-# n:1 llama.cpp/ggml-opencl.h
 do_cp ggml-opencl.h	ggml-opencl.h.0616	ggml-opencl.h.1202mod
-# n:1 llama.cpp/ggml-opencl.h.0616
-# llama.cpp/ggml-opencl.h.0616 skip cp
-# n:1 llama.cpp/ggml-opencl.h.0616
-# llama.cpp/ggml-opencl.h.0616 skip cp
-# n:1 llama.cpp/ggml-opencl.h.0616
-# llama.cpp/ggml-opencl.h.0616 skip cp
-# n:1 llama.cpp/ggml-opencl.cpp
-# n:1 llama.cpp/ggml-opencl.cpp
-# n:1 llama.cpp/ggml-opencl.cpp
 do_cp ggml-opencl.cpp	ggml-opencl.cpp.1202	ggml-opencl.cpp.1202mod
-# n:-1 llama.cpp/ggml-opencl.cpp.1202
-# n:-1 llama.cpp/ggml-opencl.cpp.1202
-# n:-1 llama.cpp/ggml-opencl.cpp.1202
-# n:1 llama.cpp/ggml-alloc.h
-# n:1 llama.cpp/ggml-alloc.h
-# n:1 llama.cpp/ggml-alloc.h
 do_cp ggml-alloc.h	ggml-alloc.h.1202	ggml-alloc.h.1202mod
-# n:-1 llama.cpp/ggml-alloc.h.1202
-# n:1 llama.cpp/ggml-alloc.h.1014
-# llama.cpp/ggml-alloc.h.1014 skip cp
-# n:-1 llama.cpp/ggml-alloc.h.1202
-# n:1 llama.cpp/ggml-alloc.c
-# n:1 llama.cpp/ggml-alloc.c
-# n:1 llama.cpp/ggml-alloc.c
 do_cp ggml-alloc.c	ggml-alloc.c.1202	ggml-alloc.c.1202mod
-# n:-1 llama.cpp/ggml-alloc.c.1202
-# n:-1 llama.cpp/ggml-alloc.c.1202
-# n:-1 llama.cpp/ggml-alloc.c.1202
-# n:1 llama.cpp/k_quants.h
-# n:-1 llama.cpp/k_quants.h
-# do_cp k_quants.h	k_quants.h.1014	k_quants.h.1014mod
-# n:-1 llama.cpp/k_quants.h.1202
-# n:1 llama.cpp/k_quants.c
-# n:-1 llama.cpp/k_quants.c
-# do_cp k_quants.c	k_quants.c.1014	k_quants.c.1014mod
-# n:-1 llama.cpp/k_quants.c.1202
-# n:1 llama.cpp/llama.h
-# n:1 llama.cpp/llama.h
-# n:1 llama.cpp/llama.h
 do_cp llama.h	llama.h.1202	llama.h.1202mod
-# n:-1 llama.cpp/llama.h.1202
-# n:-1 llama.cpp/llama.h.1202
-# n:-1 llama.cpp/llama.h.1202
-# n:1 llama.cpp/llama.cpp
-# n:1 llama.cpp/llama.cpp
-# n:1 llama.cpp/llama.cpp
 do_cp llama.cpp	llama.cpp.1202	llama.cpp.1202mod
-# n:-1 llama.cpp/llama.cpp.1202
-# n:-1 llama.cpp/llama.cpp.1202
-# n:-1 llama.cpp/llama.cpp.1202
-# do_cp llama-util.h	llama-util.h.0811	llama-util.h.0903mod
-# n:1 llama.cpp/common/CMakeLists.txt
-# n:1 llama.cpp/common/CMakeLists.txt
-# n:1 llama.cpp/common/CMakeLists.txt
 do_cp common/CMakeLists.txt	common/CMakeLists.txt.1202	common/CMakeLists.txt.1202mod
-# n:-1 llama.cpp/common/CMakeLists.txt.1202
-# n:-1 llama.cpp/common/CMakeLists.txt.1202
-# n:-1 llama.cpp/common/CMakeLists.txt.1202
-# n:1 llama.cpp/common/common.h
-# n:1 llama.cpp/common/common.h
-# n:1 llama.cpp/common/common.h
 do_cp common/common.h	common/common.h.1202	common/common.h.1202mod
-# n:-1 llama.cpp/common/common.h.1202
-# n:-1 llama.cpp/common/common.h.1202
-# n:-1 llama.cpp/common/common.h.1202
-# n:1 llama.cpp/common/common.cpp
-# n:1 llama.cpp/common/common.cpp
-# n:1 llama.cpp/common/common.cpp
 do_cp common/common.cpp	common/common.cpp.1202	common/common.cpp.1202mod
-# n:-1 llama.cpp/common/common.cpp.1202
-# n:-1 llama.cpp/common/common.cpp.1202
-# n:-1 llama.cpp/common/common.cpp.1202
-# n:1 llama.cpp/common/console.h
-# n:1 llama.cpp/common/console.h
-# n:1 llama.cpp/common/console.h
 do_cp common/console.h	common/console.h.0903	common/console.h.1202mod
-# n:1 llama.cpp/common/console.h.0903
-# llama.cpp/common/console.h.0903 skip cp
-# n:1 llama.cpp/common/console.h.0903
-# llama.cpp/common/console.h.0903 skip cp
-# n:1 llama.cpp/common/console.h.0903
-# llama.cpp/common/console.h.0903 skip cp
-# n:1 llama.cpp/common/console.cpp
-# n:1 llama.cpp/common/console.cpp
-# n:1 llama.cpp/common/console.cpp
 do_cp common/console.cpp	common/console.cpp.0930	common/console.cpp.1202mod
-# n:1 llama.cpp/common/console.cpp.0930
-# llama.cpp/common/console.cpp.0930 skip cp
-# n:1 llama.cpp/common/console.cpp.0930
-# llama.cpp/common/console.cpp.0930 skip cp
-# n:1 llama.cpp/common/console.cpp.0930
-# llama.cpp/common/console.cpp.0930 skip cp
-# n:1 llama.cpp/common/grammar-parser.h
-# n:1 llama.cpp/common/grammar-parser.h
-# n:1 llama.cpp/common/grammar-parser.h
 do_cp common/grammar-parser.h	common/grammar-parser.h.0903	common/grammar-parser.h.1202mod
-# n:1 llama.cpp/common/grammar-parser.h.0903
-# llama.cpp/common/grammar-parser.h.0903 skip cp
-# n:1 llama.cpp/common/grammar-parser.h.0903
-# llama.cpp/common/grammar-parser.h.0903 skip cp
-# n:1 llama.cpp/common/grammar-parser.h.0903
-# llama.cpp/common/grammar-parser.h.0903 skip cp
-# n:1 llama.cpp/common/grammar-parser.cpp
-# n:1 llama.cpp/common/grammar-parser.cpp
-# n:1 llama.cpp/common/grammar-parser.cpp
 do_cp common/grammar-parser.cpp	common/grammar-parser.cpp.1111	common/grammar-parser.cpp.1202mod
-# n:1 llama.cpp/common/grammar-parser.cpp.1111
-# llama.cpp/common/grammar-parser.cpp.1111 skip cp
-# n:-1 llama.cpp/common/grammar-parser.cpp.1202
-# n:1 llama.cpp/common/grammar-parser.cpp.0930
-# llama.cpp/common/grammar-parser.cpp.0930 skip cp
-# n:1 llama.cpp/common/log.h
-# n:1 llama.cpp/common/log.h
-# n:1 llama.cpp/common/log.h
 do_cp common/log.h	common/log.h.1111	common/log.h.1202mod
-# n:1 llama.cpp/common/log.h.1111
-# llama.cpp/common/log.h.1111 skip cp
-# n:-1 llama.cpp/common/log.h.1202
-# n:1 llama.cpp/common/log.h.0930
-# llama.cpp/common/log.h.0930 skip cp
-# n:1 llama.cpp/examples/CMakeLists.txt
-# n:1 llama.cpp/examples/CMakeLists.txt
-# n:1 llama.cpp/examples/CMakeLists.txt
 do_cp examples/CMakeLists.txt	examples/CMakeLists.txt.1202	examples/CMakeLists.txt.1202mod
-# n:-1 llama.cpp/examples/CMakeLists.txt.1202
-# n:-1 llama.cpp/examples/CMakeLists.txt.1202
-# n:-1 llama.cpp/examples/CMakeLists.txt.1202
-# do_cp examples/common.h	examples/common.h.0806	examples/common.h.0903mod
-# do_cp examples/common.cpp	examples/common.cpp.0811	examples/common.cpp.0903mod
-# do_cp examples/grammar-parser.h	examples/grammar-parser.h.0730	examples/grammar-parser.h.0903mod
-# do_cp examples/grammar-parser.cpp	examples/grammar-parser.cpp.0806	examples/grammar-parser.cpp.0903mod
-# do_cp examples/console.h	examples/console.h.0806	examples/console.h.0903mod
-# do_cp examples/console.cpp	examples/console.cpp.0811	examples/console.cpp.0903mod
-# n:1 llama.cpp/examples/main/main.cpp
-# n:1 llama.cpp/examples/main/main.cpp
-# n:1 llama.cpp/examples/main/main.cpp
 do_cp examples/main/main.cpp	examples/main/main.cpp.1202	examples/main/main.cpp.1202mod
-# n:-1 llama.cpp/examples/main/main.cpp.1202
-# n:-1 llama.cpp/examples/main/main.cpp.1202
-# n:-1 llama.cpp/examples/main/main.cpp.1202
-# n:1 llama.cpp/examples/benchmark/benchmark-matmult.cpp
-# n:1 llama.cpp/examples/benchmark/benchmark-matmult.cpp
-# n:1 llama.cpp/examples/benchmark/benchmark-matmult.cpp
 do_cp examples/benchmark/benchmark-matmult.cpp	examples/benchmark/benchmark-matmult.cpp.1202	examples/benchmark/benchmark-matmult.cpp.1202mod
-# n:-1 llama.cpp/examples/benchmark/benchmark-matmult.cpp.1202
-# n:-1 llama.cpp/examples/benchmark/benchmark-matmult.cpp.1202
-# n:1 llama.cpp/examples/benchmark/benchmark-matmult.cpp.0930
-# llama.cpp/examples/benchmark/benchmark-matmult.cpp.0930 skip cp
-# n:1 llama.cpp/tests/CMakeLists.txt
-# n:1 llama.cpp/tests/CMakeLists.txt
-# n:1 llama.cpp/tests/CMakeLists.txt
 do_cp tests/CMakeLists.txt	tests/CMakeLists.txt.1202	tests/CMakeLists.txt.1202mod
-# n:-1 llama.cpp/tests/CMakeLists.txt.1202
-# n:-1 llama.cpp/tests/CMakeLists.txt.1202
-# n:-1 llama.cpp/tests/CMakeLists.txt.1202
-# do_cp tests/test-tokenizer-0.cpp	tests/test-tokenizer-0.cpp.0715	tests/test-tokenizer-0.cpp.0903mod
-# n:1 llama.cpp/tests/test-quantize-fns.cpp
-# n:1 llama.cpp/tests/test-quantize-fns.cpp
-# n:1 llama.cpp/tests/test-quantize-fns.cpp
 do_cp tests/test-quantize-fns.cpp	tests/test-quantize-fns.cpp.1111	tests/test-quantize-fns.cpp.1202mod
-# n:1 llama.cpp/tests/test-quantize-fns.cpp.1111
-# llama.cpp/tests/test-quantize-fns.cpp.1111 skip cp
-# n:-1 llama.cpp/tests/test-quantize-fns.cpp.1202
-# n:1 llama.cpp/tests/test-quantize-fns.cpp.0930
-# llama.cpp/tests/test-quantize-fns.cpp.0930 skip cp
-# n:1 llama.cpp/tests/test-quantize-perf.cpp
-# n:1 llama.cpp/tests/test-quantize-perf.cpp
-# n:1 llama.cpp/tests/test-quantize-perf.cpp
 do_cp tests/test-quantize-perf.cpp	tests/test-quantize-perf.cpp.1014	tests/test-quantize-perf.cpp.1202mod
-# n:1 llama.cpp/tests/test-quantize-perf.cpp.1014
-# llama.cpp/tests/test-quantize-perf.cpp.1014 skip cp
-# n:1 llama.cpp/tests/test-quantize-perf.cpp.1014
-# llama.cpp/tests/test-quantize-perf.cpp.1014 skip cp
-# n:-1 llama.cpp/tests/test-quantize-perf.cpp.1202
-# n:1 llama.cpp/tests/test-grad0.cpp
-# n:1 llama.cpp/tests/test-grad0.cpp
-# n:1 llama.cpp/tests/test-grad0.cpp
 do_cp tests/test-grad0.cpp	tests/test-grad0.cpp.1202	tests/test-grad0.cpp.1202mod
-# n:-1 llama.cpp/tests/test-grad0.cpp.1202
-# n:1 llama.cpp/tests/test-grad0.cpp.1014
-# llama.cpp/tests/test-grad0.cpp.1014 skip cp
-# n:-1 llama.cpp/tests/test-grad0.cpp.1202
-# n:1 llama.cpp/tests/test-opt.cpp
-# n:1 llama.cpp/tests/test-opt.cpp
-# n:1 llama.cpp/tests/test-opt.cpp
 do_cp tests/test-opt.cpp	tests/test-opt.cpp.1202	tests/test-opt.cpp.1202mod
-# n:-1 llama.cpp/tests/test-opt.cpp.1202
-# n:1 llama.cpp/tests/test-opt.cpp.1014
-# llama.cpp/tests/test-opt.cpp.1014 skip cp
-# n:-1 llama.cpp/tests/test-opt.cpp.1202
-# n:1 llama.cpp/tests/test-sampling.cpp
-# n:1 llama.cpp/tests/test-sampling.cpp
-# n:1 llama.cpp/tests/test-sampling.cpp
 do_cp tests/test-sampling.cpp	tests/test-sampling.cpp.1111	tests/test-sampling.cpp.1202mod
-# n:1 llama.cpp/tests/test-sampling.cpp.1111
-# llama.cpp/tests/test-sampling.cpp.1111 skip cp
-# n:-1 llama.cpp/tests/test-sampling.cpp.1202
-# n:1 llama.cpp/tests/test-sampling.cpp.0930
-# llama.cpp/tests/test-sampling.cpp.0930 skip cp
-# do_cp tests/test-tokenizer-1.cpp	tests/test-tokenizer-1.cpp.0903	tests/test-tokenizer-1.cpp.0909mod
-# n:1 llama.cpp/tests/test-tokenizer-0-llama.cpp
-# n:1 llama.cpp/tests/test-tokenizer-0-llama.cpp
-# n:1 llama.cpp/tests/test-tokenizer-0-llama.cpp
 do_cp tests/test-tokenizer-0-llama.cpp	tests/test-tokenizer-0-llama.cpp.1014	tests/test-tokenizer-0-llama.cpp.1202mod
-# n:1 llama.cpp/tests/test-tokenizer-0-llama.cpp.1014
-# llama.cpp/tests/test-tokenizer-0-llama.cpp.1014 skip cp
-# n:1 llama.cpp/tests/test-tokenizer-0-llama.cpp.1014
-# llama.cpp/tests/test-tokenizer-0-llama.cpp.1014 skip cp
-# n:-1 llama.cpp/tests/test-tokenizer-0-llama.cpp.1202
-# n:1 llama.cpp/tests/test-tokenizer-0-falcon.cpp
-# n:1 llama.cpp/tests/test-tokenizer-0-falcon.cpp
-# n:1 llama.cpp/tests/test-tokenizer-0-falcon.cpp
 do_cp tests/test-tokenizer-0-falcon.cpp	tests/test-tokenizer-0-falcon.cpp.1014	tests/test-tokenizer-0-falcon.cpp.1202mod
-# n:1 llama.cpp/tests/test-tokenizer-0-falcon.cpp.1014
-# llama.cpp/tests/test-tokenizer-0-falcon.cpp.1014 skip cp
-# n:1 llama.cpp/tests/test-tokenizer-0-falcon.cpp.1014
-# llama.cpp/tests/test-tokenizer-0-falcon.cpp.1014 skip cp
-# n:-1 llama.cpp/tests/test-tokenizer-0-falcon.cpp.1202
-# n:1 llama.cpp/tests/test-llama-grammar.cpp
-# n:1 llama.cpp/tests/test-llama-grammar.cpp
-# n:1 llama.cpp/tests/test-llama-grammar.cpp
 do_cp tests/test-llama-grammar.cpp	tests/test-llama-grammar.cpp.0903	tests/test-llama-grammar.cpp.1202mod
-# n:1 llama.cpp/tests/test-llama-grammar.cpp.0903
-# llama.cpp/tests/test-llama-grammar.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-llama-grammar.cpp.0903
-# llama.cpp/tests/test-llama-grammar.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-llama-grammar.cpp.0903
-# llama.cpp/tests/test-llama-grammar.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-grammar-parser.cpp
-# n:1 llama.cpp/tests/test-grammar-parser.cpp
-# n:1 llama.cpp/tests/test-grammar-parser.cpp
 do_cp tests/test-grammar-parser.cpp	tests/test-grammar-parser.cpp.0903	tests/test-grammar-parser.cpp.1202mod
-# n:1 llama.cpp/tests/test-grammar-parser.cpp.0903
-# llama.cpp/tests/test-grammar-parser.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-grammar-parser.cpp.0903
-# llama.cpp/tests/test-grammar-parser.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-grammar-parser.cpp.0903
-# llama.cpp/tests/test-grammar-parser.cpp.0903 skip cp
-# n:1 llama.cpp/tests/test-c.c
-# n:1 llama.cpp/tests/test-c.c
-# n:1 llama.cpp/tests/test-c.c
 do_cp tests/test-c.c	tests/test-c.c.0903	tests/test-c.c.1202mod
-# n:1 llama.cpp/tests/test-c.c.0903
-# llama.cpp/tests/test-c.c.0903 skip cp
-# n:1 llama.cpp/tests/test-c.c.0903
-# llama.cpp/tests/test-c.c.0903 skip cp
-# n:1 llama.cpp/tests/test-c.c.0903
-# llama.cpp/tests/test-c.c.0903 skip cp
 msg "RESULT: $RESULT"
 
 if [ $CMD = "chk" ];then
@@ -593,3 +345,4 @@ fi
 # make test-quantize test-tokenizer-0
 # GGML_NLOOP=1 GGML_NTHREADS=4 make test
 msg "end"
+
