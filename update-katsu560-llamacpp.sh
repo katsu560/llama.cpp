@@ -80,11 +80,23 @@ ESCERR="$ESCRED"
 ESCWARN="$ESCMAGENTA"
 ESCINFO="$ESCWHITE"
 
+xxmsg()
+{
+	if [ $VERBOSE -ge 2 ]; then
+		echo "$MYNAME: $*" 1>&2
+	fi
+}
+
 xmsg()
 {
 	if [ $VERBOSE -ge 1 ]; then
-		echo "$MYNAME: $*"
+		echo "$MYNAME: $*" 1>&2
 	fi
+}
+
+emsg()
+{
+        echo "${ESCERR}$MYNAME: $*${ESCBACK}" 1>&2
 }
 
 msg()
@@ -98,7 +110,9 @@ die()
 
 	CODE=$1
 	shift
-	msg "$*"
+	xxmsg "die: CODE:$CODE msg:$*"
+
+        msg "${ESCERR}$*${ESCBACK}"
 	if [ $NODIE -eq $RET_TRUE ]; then
 		xmsg "die: nodie"
 		return
@@ -222,6 +236,12 @@ func_test()
 	else
 		msg "${ESCERR}${ESCBOLD}test:NG${ESCBOLDOFF}${ESCBACK}: ret:$RETCODE expected:$OKCODE ${ESCRED}$TESTMSG${ESCBACK}"
 	fi
+	msg "----"
+}
+
+set_ret()
+{
+	return $1
 }
 
 test_chk_and_cp()
@@ -325,8 +345,16 @@ test_chk_and_cp()
 
 
 ###
+BASEDIR=~/github/llama.cpp
 TOPDIR=llama.cpp
 BUILDPATH="$TOPDIR/build"
+# script
+SCRIPT=script
+FIXBASE="fix"
+SCRIPTNAME=llamacpp
+UPDATENAME=update-katsu560-${SCRIPTNAME}.sh
+FIXSHNAME=${FIXBASE}[0-9][0-9][0-9][0-9].sh
+MKZIPNAME=mkzip-${SCRIPTNAME}.sh
 
 #CMKOPT=
 OPENBLAS=`grep -sr LLAMA_OPENBLAS $TOPDIR/CMakeLists.txt | sed -z -e 's/\n//g' -e 's/.*LLAMA_OPENBLAS.*/LLAMA_OPENBLAS/'`
@@ -413,6 +441,7 @@ usage()
 	echo "cmd ... sycpcmktstnm sy,cp,cmk,tst,nm  nm .. build main but no exec"
 	echo "cmd ... mainonly .. main execution only"
 	echo "cmd ... ggufonly .. main execution w/ gguf models only"
+	echo "cmd ... script .. push $UPDATENAME $MKZIPNAME $FIXSHNAME to remote"
 }
 
 ###
@@ -652,6 +681,440 @@ do_main()
 	fi
 }
 
+# yyyymmddHHMMSS filename
+get_datefile()
+{
+	local FILE
+
+	if [ ! $# -ge 1 ]; then
+		emsg "get_datefile: RETCODE:$ERR_NOARG: ARG:$*: need FILENAME, error return"
+		return $ERR_NOARG
+	fi
+
+	FILE="$1"
+
+	xmsg "get_date: FILE:$FILE ARG:$*"
+
+	#if [ ! -f $FILE ]; then
+	#	emsg "get_datefile: RETCODE:$ERR_NOTEXISTED: $FILE: not found, error return"
+	#	return $ERR_NOTEXISTED
+	#fi
+
+	ls -ltr --time-style=+%Y%m%d%H%M%S $FILE | awk '
+	BEGIN { XDT="0"; XNM="" }
+	#{ DT=$6; T=$0; sub(/[\n\r]$/,"",T); I=index(T,DT); I=I+length(DT)+1; NM=substr(T,I); if (DT > XDT) { XDT=DT; XNM=NM }; printf("%s %s D:%s %s\n",XDT,XNM,DT,NM) >> /dev/stderr }
+	{ DT=$6; T=$0; sub(/[\n\r]$/,"",T); I=index(T,DT); I=I+length(DT)+1; NM=substr(T,I); if (DT > XDT) { XDT=DT; XNM=NM }; }
+	END { printf("%s %s\n",XDT,XNM) }
+	'
+
+	return $?
+}
+test_get_datefile()
+{
+	local DT OKFILE NGFILE TMPDIR1 OKFILE2 NGFILE2 DF RETCODE
+
+	DT=20231203145627
+	OKFILE=test.$$
+	NGFILE=test-no.$$
+	touch $OKFILE
+	rm $NGFILE
+	TMPDIR1=tmpdir.$$
+	mkdir $TMPDIR1
+	OKFILE2=$TMPDIR1/test2.$$
+	NGFILE2=$TMPDIR1/test-no2.$$
+	touch $OKFILE2
+	rm $NGFILE2
+	msg "ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1"
+	ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1
+
+	DF=`get_datefile`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile"
+
+	DF=`get_datefile $NGFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOTEXISTED "not existed: get_datefile $NGFILE"
+	DF=`get_datefile $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile $OKFILE"
+	DF=`get_datefile $NGFILE2`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOTEXISTED "not existed: get_datefile $NGFILE2"
+	DF=`get_datefile $OKFILE2`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile $OKFILE2"
+
+	rm $OKFILE $NGFILE $OKFILE2 $NGFILE2
+	rmdir $TMPDIR1
+	msg "ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1"
+	ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1
+}
+#msg "test_get_datefile"; VERBOSE=2; test_get_datefile; exit 0
+
+# Ymd|ymd|md|full yyyymmddHHMMSS filename
+get_datefile_date()
+{
+	local DTFILE
+
+	if [ ! $# -ge 3 ]; then
+		emsg "get_datefile_date: RETCODE:$ERR_NOARG: ARG:$*: need OPT DATE FILENAME, error return"
+		return $ERR_NOARG
+	fi
+
+	OPT="$1"
+	shift
+	DTFILE="$*" # date filename
+
+	xmsg "get_datefile_date: OPT:$OPT DTFILE:$DTFILE"
+
+	echo $DTFILE | awk -v OPT=$OPT '{ T=$0; sub(/[\n\r]$/,"",T); D=substr(T,1,14); if (OPT=="Ymd") { print substr(D,1,8) } else if (OPT=="ymd") { print substr(D,3,6) } else if (OPT=="md") { print substr(D,5,4) } else if (OPT=="full") { print D } else { print D } }'
+	return $?
+}
+test_get_datefile_date()
+{
+	local DT OKFILE NGFILE DF RETCODE
+
+	DT=20231203145627
+	OKFILE=test.$$
+	NGFILE=test-no.$$
+	touch $OKFILE
+	rm $NGFILE
+	ls $OKFILE $NGFILE
+
+	DF=`get_datefile_date`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_date"
+	DF=`get_datefile_date md`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_date md"
+	DF=`get_datefile_date $DT`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_date $DT"
+	DF=`get_datefile_date $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_date $OKFILE"
+	DF=`get_datefile_date $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_date $DT $OKFILE"
+
+	DF=`get_datefile_date Ymd $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date Ymd $DT $OKFILE"
+	DF=`get_datefile_date ymd $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date ymd $DT $OKFILE"
+	DF=`get_datefile_date md $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date md $DT $OKFILE"
+	DF=`get_datefile_date full $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date full $DT $OKFILE"
+	DF=`get_datefile_date ngopt $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date ngopt $DT $OKFILE"
+	DF=`get_datefile_date md $DT $NGFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date md $DT $NGFILE"
+
+	DF=`get_datefile_date Ymd $DT $OKFILE extra`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date Ymd $DT $OKFILE extra"
+	DF=`get_datefile_date md $DT $OKFILE extra`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date md $DT $OKFILE extra"
+	DF=`get_datefile_date md $DT $NGFILE extra`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_date md $DT $NGFILE extra"
+
+	rm $OKFILE $NGFILE
+}
+#msg "test_get_datefile_date"; VERBOSE=2; test_get_datefile_date; exit 0
+
+# yyyymmddHHMMSS filename
+get_datefile_file()
+{
+	local DTFILE
+
+	if [ ! $# -ge 2 ]; then
+		emsg "get_datefile_file: RETCODE:$ERR_NOARG: ARG:$*: need DATE FILENAME, error return"
+		return $ERR_NOARG
+	fi
+
+	DTFILE="$*" # date filename
+
+	xmsg "get_datefile_file: DTFILE:$DTFILE"
+
+	echo $DTFILE | awk '{ T=$0; sub(/[\n\r]$/,"",T); F=substr(T,16); print F }'
+}
+test_get_datefile_file()
+{
+	local DT OKFILE NGFILE TMPDIR1 OKFILE2 NGFILE2 DF RETCODE
+
+	DT=20231203145627
+	OKFILE=test.$$
+	NGFILE=test-no.$$
+	touch $OKFILE
+	rm $NGFILE
+	TMPDIR1=tmpdir.$$
+	mkdir $TMPDIR1
+	OKFILE2=$TMPDIR1/test2.$$
+	NGFILE2=$TMPDIR1/test-no2.$$
+	touch $OKFILE2
+	rm $NGFILE2
+	msg "ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1"
+	ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1
+
+	DF=`get_datefile_file`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_file"
+
+	DF=`get_datefile_file md`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_file md"
+	DF=`get_datefile_file $DT`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_file $DT"
+	DF=`get_datefile_file $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: get_datefile_file $OKFILE"
+
+	DF=`get_datefile_file $DT $OKFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_file $DT $OKFILE"
+	DF=`get_datefile_file $DT $NGFILE`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_file $DT $NGFILE"
+	DF=`get_datefile_file $DT $OKFILE2`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_file $DT $OKFILE2"
+	DF=`get_datefile_file $DT $NGFILE2`
+	RETCODE=$?; msg "DF:$DF"; set_ret $RETCODE
+	func_test $RET_OK "ok: get_datefile_file $DT $NGFILE2"
+
+	rm $OKFILE $NGFILE $OKFILE2 $NGFILE2
+	rmdir $TMPDIR1
+	msg "ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1"
+	ls $OKFILE $NGFILE $OKFILE2 $NGFILE2 $TMPDIR1
+}
+#msg "test_get_datefile_file"; VERBOSE=2; test_get_datefile_file; exit 0
+
+# copy srcfile to dstfile.mmdd and dstfile
+cp_script()
+{
+	local SRC DST DFSRC MDSRC DSTDT
+
+	if [ ! $# -ge 2 ]; then
+		emsg "cp_script: RETCODE:$ERR_NOARG: ARG:$*: need SRC DST, error return"
+		return $ERR_NOARG
+	fi
+
+	SRC="$1"
+	DST="$2"
+	xmsg "cp_script: SRC:$SRC"
+	xmsg "cp_script: DST:$DST"
+
+	if [ ! -f "$SRC" ]; then
+		emsg "cp_script: RETCODE:$ERR_NOTEXISTED: $SRC: not found, error return"
+		return $ERR_NOTEXISTED
+	fi
+	if [ "$SRC" = "$DST" ]; then
+		emsg "cp_script: RETCODE:$ERR_BADARG: $SRC: $DST: same file, error return"
+		return $ERR_BADARG
+	fi
+
+	DFSRC=`get_datefile "$SRC"`
+	xxmsg "cp_script: DFSRC:$DFSRC"
+	MDSRC=`get_datefile_date md $DFSRC`
+	xxmsg "cp_script: MDSRC:$MDSRC"
+	DSTDT="${DST}.$MDSRC"
+	msg "cp -p \"$SRC\" \"$DSTDT\""
+	if [ $NOEXEC -eq $RET_FALSE ]; then
+		cp -p "$SRC" "$DSTDT"
+	fi
+	msg "cp -p \"$SRC\" \"$DST\""
+	if [ $NOEXEC -eq $RET_FALSE ]; then
+		cp -p "$SRC" "$DST"
+	fi
+}
+test_cp_script()
+{
+	local DT OKFILE NGFILE TMPDIR1 OKFILE2 NGFILE2 DF RETCODE
+
+	DT=`date '+%m%d'`
+	msg "DT:$DT0"
+	OKFILE=test.$$
+	NGFILE=test-no.$$
+	touch $OKFILE
+	rm $NGFILE
+	TMPDIR1=tmpdir.$$
+	mkdir $TMPDIR1
+	OKFILE2=$TMPDIR1/test2.$$
+	NGFILE2=$TMPDIR1/test-no2.$$
+	touch $OKFILE2
+	rm $NGFILE2
+	msg "ls $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}* $TMPDIR1"
+	ls $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}* $TMPDIR1
+
+	cp_script
+	func_test $ERR_NOARG "no arg: cp_script"
+
+	msg "ls -l $OKFILE $NGFILE $OKFILE2 $NGFILE2"
+	cp_script $NGFILE
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: cp_script $NGFILE"
+	cp_script $OKFILE
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: cp_script $OKFILE"
+	cp_script $NGFILE2
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: cp_script $NGFILE2"
+	cp_script $OKFILE2
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $ERR_NOARG "no arg: cp_script $OKFILE2"
+
+	cp_script $NGFILE $NGFILE2
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $ERR_NOTEXISTED "not existed: cp_script $NGFILE $NGFILE2"
+	cp_script $OKFILE $OKFILE2
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $RET_OK "ok: cp_script $OKFILE $OKFILE2"
+	cp_script $OKFILE $NGFILE
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $RET_OK "ok: cp_script $OKFILE $NGFILE"
+	rm $NGFILE
+	cp_script $OKFILE $NGFILE2
+	RETCODE=$?; ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*; set_ret $RETCODE
+	func_test $RET_OK "ok: cp_script $OKFILE $NGFILE2"
+	rm $NGFILE2
+
+
+	msg "rm $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*"
+	rm $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*
+	rmdir $TMPDIR1
+	msg "ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*"
+	ls -l $OKFILE ${NGFILE}* ${OKFILE2}* ${NGFILE2}*
+}
+#msg "test_cp_script"; VERBOSE=2; NOEXEC=$RET_TRUE; test_cp_script; exit 0
+#msg "test_cp_script"; VERBOSE=2; NOEXEC=$RET_FALSE; test_cp_script; exit 0
+
+git_script()
+{
+	local DT0 COMMITFILES
+	local DFUPDATE DFFIXSH DFMKZIP FUPDATE FFIXSH FMKZIP
+	local DFUPDATEG DFFIXSHG DFMKZIPG FUPDATEG FFIXSHG FMKZIPG
+
+	DT0=`date '+%m%d'`
+	msg "DT0:$DT0"
+	COMMITFILES=""
+
+	# BASEDIR
+	msg "cd $BASEDIR"
+	cd $BASEDIR
+	if [ $VERBOSE -ge 1 ]; then
+		msg "ls -ltr ${FIXSHNAME}* ${MKZIPNAME}* ${UPDATENAME}*"
+		ls -ltr ${FIXSHNAME}* ${MKZIPNAME}* ${UPDATENAME}*
+	fi
+	DFUPDATE=`get_datefile "${UPDATENAME}"`
+	DFFIXSH=`get_datefile "${FIXSHNAME}*"`
+	DFMKZIP=`get_datefile "${MKZIPNAME}"`
+	FUPDATE=`get_datefile_file $DFUPDATE`
+	FFIXSH=`get_datefile_file $DFFIXSH`
+	FMKZIP=`get_datefile_file $DFMKZIP`
+	msg "FUPDATE:$FUPDATE"
+	msg "FFIXSH:$FFIXSH"
+	msg "FMKZIP:$FMKZIP"
+
+	# git SCRIPT branch
+	msg "cd $BASEDIR/$TOPDIR"
+	cd $BASEDIR/$TOPDIR
+	msg "git branch"
+	git branch
+	msg "git checkout $SCRIPT"
+	git checkout $SCRIPT
+
+	if [ $VERBOSE -ge 1 ]; then
+		msg "ls -ltr ${FIXSHNAME}* ${MKZIPNAME}* ${UPDATENAME}*"
+		ls -ltr ${FIXSHNAME}* ${MKZIPNAME}* ${UPDATENAME}*
+	fi
+	# G git
+	DFUPDATEG=`get_datefile "${UPDATENAME}"`
+	DFFIXSHG=`get_datefile "${FIXSHNAME}*"`
+	DFMKZIPG=`get_datefile "${MKZIPNAME}"`
+	FUPDATEG=`get_datefile_file $DFUPDATEG`
+	FFIXSHG=`get_datefile_file $DFFIXSHG`
+	FMKZIPG=`get_datefile_file $DFMKZIPG`
+	msg "FUPDATEG:$FUPDATEG"
+	msg "FFIXSHG:$FFIXSHG"
+	msg "FMKZIPG:$FMKZIPG"
+
+	msg "diff $FUPDATEG $BASEDIR/$FUPDATE"
+	if [ $VERBOSE -ge 1 ]; then
+		diff $FUPDATEG $BASEDIR/$FUPDATE
+	else
+		diff $FUPDATEG $BASEDIR/$FUPDATE > /dev/null
+	fi
+	if [ $? -eq $RET_OK ]; then
+		msg "same: no copy: $BASEDIR/$FUPDATE $FUPDATEG"
+	else
+		msg "diff: copy: $BASEDIR/$FUPDATE $FUPDATEG"
+		cp_script $BASEDIR/$FUPDATE $FUPDATEG
+		COMMITFILES="$COMMITFILES $FUPDATEG"
+	fi
+
+	if [ $FFIXSH = $FFIXSHG ]; then
+		# diff, copy
+		msg "diff $FFIXSHG $BASEDIR/$FFIXSH"
+		if [ $VERBOSE -ge 1 ]; then
+			diff $FFIXSHG $BASEDIR/$FFIXSH
+		else
+			diff $FFIXSHG $BASEDIR/$FFIXSH > /dev/null
+		fi
+		if [ $? -eq $RET_OK ]; then
+			msg "same: no copy: $BASEDIR/$FFIXSH $FFIXSHG"
+		else
+			msg "diff: copy: $BASEDIR/$FFIXSH $FFIXSHG"
+			cp_script $BASEDIR/$FFIXSH $FFIXSHG
+			COMMITFILES="$COMMITFILES $FFIXSHG"
+		fi
+	else
+		# always copy
+		msg "always: copy: $BASEDIR/$FFIXSH $FFIXSH"
+		msg "cp -p $BASEDIR/$FFIXSH $FFIXSH"
+		if [ $NOEXEC -eq $RET_FALSE ]; then
+			cp -p $BASEDIR/$FFIXSH $FFIXSH
+			COMMITFILES="$COMMITFILES $FFIXSH"
+		fi
+	fi
+
+	msg "diff $FMKZIPG $BASEDIR/$FMKZIP"
+	if [ $VERBOSE -ge 1 ]; then
+		diff $FMKZIPG $BASEDIR/$FMKZIP
+	else
+		diff $FMKZIPG $BASEDIR/$FMKZIP > /dev/null
+	fi
+	if [ $? -eq $RET_OK ]; then
+		msg "same: no copy: $BASEDIR/$FMKZIP $FMKZIPG"
+	else
+		msg "diff: copy: $BASEDIR/$FMKZIP $FMKZIPG"
+		cp_script $BASEDIR/$FMKZIP $FMKZIPG
+		COMMITFILES="$COMMITFILES $FMKZIPG"
+	fi
+
+	if [ x"$COMMITFILES" = x ]; then
+		msg "git commit -m \"update scripts\" $COMMITFILES"
+		git commit -m "update scripts" $COMMITFILES
+		msg "git status"
+		git status
+		msg "git push origin $SCRIPT"
+		git push origin $SCRIPT
+	fi
+
+	# back
+	msg "git checkout $BRANCH"
+	git checkout $BRANCH
+}
+#msg "do_script"; NOEXEC=$RET_TRUE; VERBOSE=2; do_script; exit 0
+
 ###
 msg "# start"
 
@@ -716,6 +1179,12 @@ case $CMD in
 *ggufonly*)	do_main NOMAKE GGUF;;
 *main*)		do_main;;
 *)		msg "no make main";;
+esac
+
+case $CMD in
+*script*)	git_script;;
+*scr*)		git_script;;
+*)	msg "no git push script";;
 esac
 
 msg "# done."
