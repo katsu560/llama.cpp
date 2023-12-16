@@ -999,12 +999,16 @@ test_cp_script()
 
 git_script()
 {
-	local DT0 COMMITFILES
+	msg "git push scripts ..."
+
+	local DT0 ADDFILES COMMITFILES
 	local DFUPDATE DFFIXSH DFMKZIP FUPDATE FFIXSH FMKZIP
 	local DFUPDATEG DFFIXSHG DFMKZIPG FUPDATEG FFIXSHG FMKZIPG
 
 	DT0=`date '+%m%d'`
 	msg "DT0:$DT0"
+
+	ADDFILES=""
 	COMMITFILES=""
 
 	# BASEDIR
@@ -1082,6 +1086,7 @@ git_script()
 		msg "cp -p $BASEDIR/$FFIXSH $FFIXSH"
 		if [ $NOEXEC -eq $RET_FALSE ]; then
 			cp -p $BASEDIR/$FFIXSH $FFIXSH
+			ADDFILES="$ADDFILES $FFIXSH"
 			COMMITFILES="$COMMITFILES $FFIXSH"
 		fi
 	fi
@@ -1100,7 +1105,16 @@ git_script()
 		COMMITFILES="$COMMITFILES $FMKZIPG"
 	fi
 
-	if [ x"$COMMITFILES" = x ]; then
+	msg "ADDFILES:$ADDFILES"
+	msg "COMMITFILES:$COMMITFILES"
+	if [ ! x"$COMMITFILES" = x ]; then
+		# avoid error: pathspec 'fix1202.sh' did not match any file(s) known to git.
+		msg "git fetch"
+		git fetch
+		if [ ! x"$ADDFILES" = x ]; then
+			msg "git add $ADDFILES"
+			git add $ADDFILES
+		fi
 		msg "git commit -m \"update scripts\" $COMMITFILES"
 		git commit -m "update scripts" $COMMITFILES
 		msg "git status"
@@ -1149,26 +1163,26 @@ if [ ! -e $DIRNAME ]; then
 fi
 
 case $CMD in
-*sy*)	do_sync;;
-*sync*)	do_sync;;
-*)	msg "no sync";;
+*sy*)		do_sync;;
+*sync*)		do_sync;;
+*)		msg "no sync";;
 esac
 
 case $CMD in
-*cp*)	do_cp;;
-*)	msg "no copy";;
+*cp*)		do_cp;;
+*)		msg "no copy";;
 esac
 
 case $CMD in
-*cmk*)	do_cmk;;
-*cmake*) do_cmk;;
-*)	msg "no cmake";;
+*cmk*)		do_cmk;;
+*cmake*)	do_cmk;;
+*)		msg "no cmake";;
 esac
 
 case $CMD in
-*tst*)	do_test;;
-*test*)	do_test;;
-*)	msg "no make test";;
+*tst*)		do_test;;
+*test*)		do_test;;
+*)		msg "no make test";;
 esac
 
 case $CMD in
@@ -1184,7 +1198,7 @@ esac
 case $CMD in
 *script*)	git_script;;
 *scr*)		git_script;;
-*)	msg "no git push script";;
+*)		msg "no git push script";;
 esac
 
 msg "# done."
