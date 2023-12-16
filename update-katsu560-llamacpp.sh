@@ -356,6 +356,12 @@ UPDATENAME=update-katsu560-${SCRIPTNAME}.sh
 FIXSHNAME=${FIXBASE}[0-9][0-9][0-9][0-9].sh
 MKZIPNAME=mkzip-${SCRIPTNAME}.sh
 
+PROMPT="Building a website can be done in 10 simple steps:"
+PROMPTCHAT="Tell me about FIFA worldcup 2022 Qatar. What country win the match?"
+PROMPTJP="日本語で回答ください。京都について教えてください"
+SEED=1681527203
+MAINOPT="--log-disable"
+
 #CMKOPT=
 OPENBLAS=`grep -sr LLAMA_OPENBLAS $TOPDIR/CMakeLists.txt | sed -z -e 's/\n//g' -e 's/.*LLAMA_OPENBLAS.*/LLAMA_OPENBLAS/'`
 BLAS=`grep -sr LLAMA_BLAS $TOPDIR/CMakeLists.txt | sed -z -e 's/\n//g' -e 's/.*LLAMA_BLAS.*/LLAMA_BLAS/'`
@@ -381,43 +387,46 @@ CMKOPTNONE="$CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUI
 CMKOPT="$CMKOPTNONE"
 
 TESTOPT="GGML_NLOOP=1 GGML_NTHREADS=4"
-#TESTS="test-quantize-fns test-quantize-perf test-sampling test-tokenizer-0"
-#TESTS="test-quantize-fns test-quantize-perf test-sampling test-tokenizer-0 test-grad0"
-#TESTS="test-quantize-fns test-quantize-perf test-sampling test-grad0"
-TESTS="test-quantize-fns test-quantize-perf"
-TESTSCPP="test-grad0 test-llama-grammar test-grammar-parser test-rope test-sampling test-tokenizer-0 test-tokenizer-0-llama test-tokenizer-0-falcon test-tokenizer-1 test-tokenizer-1-llama test-tokenizer-1-bpe"
-TESTSC="test-c"
+NOTGT="gguf llama-bench infill"
 NOTEST="test-double-float test-opt"
-for i in $TESTSCPP
-do
-	if [ -f $TOPDIR/tests/$i.cpp ]; then
-		TESTS="$TESTS $i"
-	fi
-done
-for i in $TESTSC
-do
-	if [ -f $TOPDIR/tests/$i.c ]; then
-		TESTS="$TESTS $i"
-	fi
-done
-ALLBINSUP="main quantize quantize-stats perplexity embedding save-load-state"
-ALLBINS="main quantize quantize-stats perplexity embedding save-load-state benchmark vdot q8dot"
-BINSDIR="baby-llama batched beam-search export-lora finetune parallel server simple speculative batched-bench llava tokenize lookahead"
-NOBINS="gguf llama-bench infill"
-for i in $BINSDIR
-do
-	if [ -d $TOPDIR/examples/$i ]; then
-		ALLBINS="$ALLBINS $i"
-	fi
-done
-BINSCPP="benchmark/benckmark-matmult embd-input/embd-input-test"
-for i in $BINSCPP
-do
-	if [ -d $TOPDIR/examples/$i.cpp ]; then
-		BIN=`basename $i`
-		ALLBINS="$ALLBINS $BIN"
-	fi
-done
+TARGETS=
+TESTS=
+ALLBINS=
+
+get_targets()
+{
+        if [ ! -e $TOPDIR/Makefile ]; then
+                msg "no $TOPDIR/Makefile"
+                return $ERR_NOTEXISTED
+        fi
+
+        TARGETS=`awk -v NOTGT0="$NOTGT" '
+	BEGIN { ST=0; split(NOTGT0,NOTGT); }
+	function is_notgt(tgt) {
+       		for(i in NOTGT) { if (NOTGT[i]==tgt) return 1; continue }
+       		return 0;
+	}
+	ST==1 && /^$/ { ST=2 }
+	ST==1 && !/^$/ { T=$0; sub(/[\r\n]$/,"",T); sub(/^[ ]*/,"",T); sub(/\\\/,"",T); split(T,TGT0); for(I in TGT0) { if (is_notgt(TGT0[I])==0) { printf("%s ",TGT0[I]) } } }
+	ST==0 && /^BUILD_TARGETS = / { ST=1 }
+	' $TOPDIR/Makefile`
+        msg "TARGETS: $TARGETS"
+
+        TESTS=`awk -v NOTGT0="$NOTEST" '
+	BEGIN { ST=0; split(NOTGT0,NOTGT); }
+	function is_notgt(tgt) {
+       		for(i in NOTGT) { if (NOTGT[i]==tgt) return 1; continue }
+       		return 0;
+	}
+	ST==1 && /^$/ { ST=2 }
+	ST==1 && !/^$/ { T=$0; sub(/[\r\n]$/,"",T); sub(/^[ ]*/,"",T); sub(/\\\/,"",T); gsub(/tests\//,"",T); split(T,TGT0); for(I in TGT0) { if (is_notgt(TGT0[I])==0) { printf("%s ",TGT0[I]) } } }
+	ST==0 && /^TEST_TARGETS = / { ST=1 }
+	' $TOPDIR/Makefile`
+        msg "TESTS: $TESTS"
+
+        return $RET_OK
+}
+#get_targets; exit 0
 
 # default -avx
 CMKOPT="$CMKOPTAVX"
@@ -461,7 +470,7 @@ do
 	-nd|--nodie)	NODIE=$RET_TRUE;;
 	-ncp|--nocopy)	NOCOPY=$RET_TRUE;;
 	-nc|--noclean)	NOCLEAN=$RET_TRUE;;
-	-up)		ALLBINS="$ALLBINSUP";;
+	#-up)		ALLBINS="$ALLBINSUP";;
 	-noavx)		CMKOPT="$CMKOPTNOAVX";;
 	-avx)		CMKOPT="$CMKOPTAVX";;
 	-avx2)		CMKOPT="$CMKOPTAVX2";;
@@ -544,122 +553,119 @@ do_test()
 
 do_main()
 {
-	MAINOPT="$1"
+	local DOMAINOPT SUBOPT BINS
+
+	DOMAINOPT="$1"
 	SUBOPT="$2"
 
 	# in build
 
-	msg "# executing main ... (MAINOPT:$MAINOPT SUBOPT:$SUBOPT)"
+	msg "# executing main ... (DOMAINOPT:$DOMAINOPT SUBOPT:$SUBOPT)"
 	# make main
-	if [ ! x"$MAINOPT" = xNOMAKE ]; then
+	if [ ! x"$DOMAINOPT" = xNOMAKE ]; then
 		if [ $MKCLEAN -eq $RET_FALSE -a $NOCLEAN -eq $RET_FALSE ]; then
 			msg "make clean"
 			make clean || die 501 "make clean failed"
 			MKCLEAN=$RET_TRUE
 		fi
-		msg "make $ALLBINS"
-		make $ALLBINS || die 502 "make main failed"
-		BINTESTS=""; for i in $ALLBINS ;do BINTESTS="$BINTESTS bin/$i" ;done
-		#msg "cp -p $BINTESTS $DIRNAME/"
-		chk_and_cp -p $BINTESTS $DIRNAME || die 503 "can't cp main"
+		msg "make $TARGETS"
+		make $TARGETS || die 502 "make main failed"
+		BINS=""; for i in $TARGETS ;do BINS="$BINS bin/$i" ;done
+		#msg "cp -p $BINS $DIRNAME/"
+		chk_and_cp -p $BINS $DIRNAME || die 503 "can't cp main"
 	fi
+
 	# main
-	PROMPT="Building a website can be done in 10 simple steps:"
-	PROMPTCHAT="Tell me about FIFA worldcup 2022 Qatar. What country win the match?"
-	PROMPTJP="日本語で回答ください。京都について教えてください"
-	SEED=1681527203
-	OPT="--log-disable"
-
-	if [ ! x"$MAINOPT" = xNOEXEC ]; then
+	if [ ! x"$DOMAINOPT" = xNOEXEC ]; then
 		if [ -f ./$DIRNAME/main -a ! x"$SUBOPT" = xGGUF ]; then
-			msg "./$DIRNAME/main -m ../models/ggml-alpaca-7b-q4.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/ggml-alpaca-7b-q4.bin -n 512 $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/ggml-alpaca-7b-q4.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/ggml-alpaca-7b-q4.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
 
 			#
-			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_0.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/ggml-vic7b-q4_0.bin -n 512 $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_1.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/ggml-vic7b-q4_1.bin -n 512 $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_0-new.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/ggml-vic7b-q4_0-new.bin -n 512 $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_0.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/ggml-vic7b-q4_0.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_1.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/ggml-vic7b-q4_1.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/ggml-vic7b-q4_0-new.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/ggml-vic7b-q4_0-new.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
 			#
-			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q4_0.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q4_0.bin -n 512 $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_0.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_0.bin -n 512 $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_1.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_1.bin -n 512 $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q4_0.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q4_0.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_0.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_0.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_1.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/WizardLM-7B-uncensored.ggml.q5_1.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
 
 
-			msg "./$DIRNAME/main -m ../models/Wizard-Vicuna-13B-Uncensored.ggml.q4_0.bin -n 512 $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/Wizard-Vicuna-13B-Uncensored.ggml.q4_0.bin -n 512 $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/Wizard-Vicuna-13B-Uncensored.ggml.q4_0.bin -n 512 $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/Wizard-Vicuna-13B-Uncensored.ggml.q4_0.bin -n 512 $MAINOPT -s $SEED -p "$PROMPT"
 
 			# vicuna 1.1 2023.6
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q2_K.bin $OPT $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q2_K.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_L.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_L.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_M.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_M.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_S.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_S.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_0.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_0.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_1.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_1.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_M.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_M.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_S.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_S.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_0.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_0.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_1.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_1.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_M.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_M.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_S.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_S.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q6_K.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q6_K.bin $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q8_0.bin $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q8_0.bin $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q2_K.bin $MAINOPT $OPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q2_K.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_L.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_L.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_M.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_M.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_S.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q3_K_S.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_0.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_0.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_1.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_1.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_M.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_M.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_S.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q4_K_S.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_0.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_0.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_1.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_1.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_M.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_M.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_S.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q5_K_S.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q6_K.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q6_K.bin $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q8_0.bin $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/vicuna-7b-1.1.ggmlv3.q8_0.bin $MAINOPT -s $SEED -p "$PROMPT"
 			#
-			msg "./$DIRNAME/main -m ../models/7B/ggml-model-f32.bin $OPT -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/7B/ggml-model-f32.bin $OPT -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/7B/ggml-model-q4_0.bin $OPT -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/7B/ggml-model-q4_0.bin $OPT -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/7B/ggml-model-f32.bin $MAINOPT -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/7B/ggml-model-f32.bin $MAINOPT -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/7B/ggml-model-q4_0.bin $MAINOPT -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/7B/ggml-model-q4_0.bin $MAINOPT -p "$PROMPT"
 
 		elif [ -f ./$DIRNAME/main ]; then
 			# gguf since 2023.8
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q2_K.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q2_K.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q3_K_S.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q3_K_S.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q4_0.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q4_0.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q4_K_M.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q4_K_M.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_0.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q5_0.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_S.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_S.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_M.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_M.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q6_0.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q6_0.gguf $OPT -s $SEED -p "$PROMPT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q8_0.gguf $OPT -s $SEED -p \"$PROMPT\""
-			./$DIRNAME/main -m ../models/llama-2-7b.Q8_0.gguf $OPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q2_K.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q2_K.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q3_K_S.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q3_K_S.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q4_0.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q4_0.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q4_K_M.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q4_K_M.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_0.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q5_0.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_S.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_S.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_M.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q5_K_M.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q6_0.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q6_0.gguf $MAINOPT -s $SEED -p "$PROMPT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b.Q8_0.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
+			./$DIRNAME/main -m ../models/llama-2-7b.Q8_0.gguf $MAINOPT -s $SEED -p "$PROMPT"
 			#
-			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q2_K.gguf $OPT -s $SEED -p \"$PROMPTCHAT\""
-			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q2_K.gguf $OPT -s $SEED -p "$PROMPTCHAT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q4_K_M.gguf $OPT -s $SEED -p \"$PROMPTCHAT\""
-			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q4_K_M.gguf $OPT -s $SEED -p "$PROMPTCHAT"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_S.gguf $OPT -s $SEED -p \"$PROMPTJP\""
-			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_S.gguf $OPT -s $SEED -p "$PROMPTJP"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_M.gguf $OPT -s $SEED -p \"$PROMPTJP\""
-			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_M.gguf $OPT -s $SEED -p "$PROMPTJP"
-			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q8_0.gguf $OPT -s $SEED -p \"$PROMPTJP\""
-			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q8_0.gguf $OPT -s $SEED -p "$PROMPTJP"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q2_K.gguf $MAINOPT -s $SEED -p \"$PROMPTCHAT\""
+			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q2_K.gguf $MAINOPT -s $SEED -p "$PROMPTCHAT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q4_K_M.gguf $MAINOPT -s $SEED -p \"$PROMPTCHAT\""
+			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q4_K_M.gguf $MAINOPT -s $SEED -p "$PROMPTCHAT"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_S.gguf $MAINOPT -s $SEED -p \"$PROMPTJP\""
+			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_S.gguf $MAINOPT -s $SEED -p "$PROMPTJP"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_M.gguf $MAINOPT -s $SEED -p \"$PROMPTJP\""
+			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q3_K_M.gguf $MAINOPT -s $SEED -p "$PROMPTJP"
+			msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q8_0.gguf $MAINOPT -s $SEED -p \"$PROMPTJP\""
+			./$DIRNAME/main -m ../models/llama-2-7b-chat.Q8_0.gguf $MAINOPT -s $SEED -p "$PROMPTJP"
 		else
 			msg "no ./$DIRNAME/main, skip executing main"
 		fi
@@ -999,7 +1005,7 @@ test_cp_script()
 
 git_script()
 {
-	msg "git push scripts ..."
+	msg "# git push scripts ..."
 
 	local DT0 ADDFILES COMMITFILES
 	local DFUPDATE DFFIXSH DFMKZIP FUPDATE FFIXSH FMKZIP
