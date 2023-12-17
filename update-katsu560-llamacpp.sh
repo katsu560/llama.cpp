@@ -133,7 +133,7 @@ chk_and_cp()
 	#xmsg "chk_and_cp: $*"
 	#xmsg "chk_and_cp: nargs:$# args:$*"
 	if [ $# -eq 0 ]; then
-		msg "${ESCERR}chk_and_cp: no cpopt, chkfiles${ESCBACK}"
+		msg "${ESCERR}chk_and_cp: ARG:$*: no cpopt, chkfiles${ESCBACK}"
 		return $ERR_NOARG
 	fi
 
@@ -143,7 +143,7 @@ chk_and_cp()
 	#xmsg "chk_and_cp: narg:$# args:$*"
 
 	if [ $# -le 1 ]; then
-		msg "${ESCERR}chk_and_cp: bad arg, not enough${ESCBACK}"
+		msg "${ESCERR}chk_and_cp: CPOPT:$cpopt ARG:$*: bad arg, not enough${ESCBACK}"
 		return $ERR_BADARG
 	fi
 
@@ -387,19 +387,19 @@ CMKOPTNONE="$CMKOPTBLAS -DLLAMA_STANDALONE=ON -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUI
 CMKOPT="$CMKOPTNONE"
 
 TESTOPT="GGML_NLOOP=1 GGML_NTHREADS=4"
-NOTGT="gguf llama-bench infill"
+NOTGT="gguf libllava.a benchmark-matmult tests/test-c.o"
 NOTEST="test-double-float test-opt"
 TARGETS=
 TESTS=
-ALLBINS=
 
 get_targets()
 {
-        if [ ! -e $TOPDIR/Makefile ]; then
-                msg "no $TOPDIR/Makefile"
+        if [ ! -e $BASEDIR/$TOPDIR/Makefile ]; then
+                msg "no $BASEDIR/$TOPDIR/Makefile"
                 return $ERR_NOTEXISTED
         fi
 
+        msg "NOTGTS: $NOTGT"
         TARGETS=`awk -v NOTGT0="$NOTGT" '
 	BEGIN { ST=0; split(NOTGT0,NOTGT); }
 	function is_notgt(tgt) {
@@ -409,9 +409,10 @@ get_targets()
 	ST==1 && /^$/ { ST=2 }
 	ST==1 && !/^$/ { T=$0; sub(/[\r\n]$/,"",T); sub(/^[ ]*/,"",T); sub(/\\\/,"",T); split(T,TGT0); for(I in TGT0) { if (is_notgt(TGT0[I])==0) { printf("%s ",TGT0[I]) } } }
 	ST==0 && /^BUILD_TARGETS = / { ST=1 }
-	' $TOPDIR/Makefile`
+	' $BASEDIR/$TOPDIR/Makefile`
         msg "TARGETS: $TARGETS"
 
+        msg "NOTEST: $NOTEST"
         TESTS=`awk -v NOTGT0="$NOTEST" '
 	BEGIN { ST=0; split(NOTGT0,NOTGT); }
 	function is_notgt(tgt) {
@@ -421,7 +422,7 @@ get_targets()
 	ST==1 && /^$/ { ST=2 }
 	ST==1 && !/^$/ { T=$0; sub(/[\r\n]$/,"",T); sub(/^[ ]*/,"",T); sub(/\\\/,"",T); gsub(/tests\//,"",T); split(T,TGT0); for(I in TGT0) { if (is_notgt(TGT0[I])==0) { printf("%s ",TGT0[I]) } } }
 	ST==0 && /^TEST_TARGETS = / { ST=1 }
-	' $TOPDIR/Makefile`
+	' $BASEDIR/$TOPDIR/Makefile`
         msg "TESTS: $TESTS"
 
         return $RET_OK
@@ -543,6 +544,8 @@ do_test()
 		make clean || die 401 "make clean failed"
 		MKCLEAN=$RET_TRUE
 	fi
+	msg "get_targets"
+	get_targets
 	msg "make $TESTS"
 	make $TESTS || die 402 "make test build failed"
 	#msg "cp -p bin/test* $DIRNAME/"
@@ -568,6 +571,8 @@ do_main()
 			make clean || die 501 "make clean failed"
 			MKCLEAN=$RET_TRUE
 		fi
+		msg "get_targets"
+		get_targets
 		msg "make $TARGETS"
 		make $TARGETS || die 502 "make main failed"
 		BINS=""; for i in $TARGETS ;do BINS="$BINS bin/$i" ;done
@@ -1197,6 +1202,7 @@ case $CMD in
 *mainonly*)	do_main NOMAKE;;
 *mainggufonly*)	do_main NOMAKE GGUF;;
 *ggufonly*)	do_main NOMAKE GGUF;;
+*gguf*)		do_main MAKE GGUF;;
 *main*)		do_main;;
 *)		msg "no make main";;
 esac
