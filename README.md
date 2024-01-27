@@ -10,10 +10,11 @@ Inference of [LLaMA](https://arxiv.org/abs/2302.13971) model in pure C/C++
 
 ### Hot topics
 
+- ⚠️ Incoming backends: https://github.com/ggerganov/llama.cpp/discussions/5138
+- New SOTA quantized models, including pure 2-bits: https://huggingface.co/ikawrakow
 - Collecting Apple Silicon performance stats:
   - M-series: https://github.com/ggerganov/llama.cpp/discussions/4167
   - A-series: https://github.com/ggerganov/llama.cpp/discussions/4508
-- Added Mixtral support: https://github.com/ggerganov/llama.cpp/pull/4406
 - Looking for contributions to improve and maintain the `server` example: https://github.com/ggerganov/llama.cpp/issues/4216
 
 ----
@@ -111,6 +112,7 @@ as the main playground for developing new features for the [ggml](https://github
 - [x] [Bakllava](https://huggingface.co/models?search=SkunkworksAI/Bakllava)
 - [x] [Obsidian](https://huggingface.co/NousResearch/Obsidian-3B-V0.5)
 - [x] [ShareGPT4V](https://huggingface.co/models?search=Lin-Chen/ShareGPT4V)
+- [x] [MobileVLM 1.7B/3B models](https://huggingface.co/models?search=mobileVLM)
 
 
 **Bindings:**
@@ -118,6 +120,7 @@ as the main playground for developing new features for the [ggml](https://github
 - Python: [abetlen/llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
 - Go: [go-skynet/go-llama.cpp](https://github.com/go-skynet/go-llama.cpp)
 - Node.js: [withcatai/node-llama-cpp](https://github.com/withcatai/node-llama-cpp)
+- JS/TS (llama.cpp server client): [lgrammel/modelfusion](https://modelfusion.dev/integration/model-provider/llamacpp)
 - Ruby: [yoshoku/llama_cpp.rb](https://github.com/yoshoku/llama_cpp.rb)
 - Rust: [mdrokz/rust-llama.cpp](https://github.com/mdrokz/rust-llama.cpp)
 - C#/.NET: [SciSharp/LLamaSharp](https://github.com/SciSharp/LLamaSharp)
@@ -126,6 +129,7 @@ as the main playground for developing new features for the [ggml](https://github
 - React Native: [mybigday/llama.rn](https://github.com/mybigday/llama.rn)
 - Java: [kherud/java-llama.cpp](https://github.com/kherud/java-llama.cpp)
 - Zig: [deins/llama.cpp.zig](https://github.com/Deins/llama.cpp.zig)
+- Flutter/Dart: [netdur/llama_cpp_dart](https://github.com/netdur/llama_cpp_dart)
 
 **UI:**
 
@@ -135,6 +139,7 @@ as the main playground for developing new features for the [ggml](https://github
 - [semperai/amica](https://github.com/semperai/amica)
 - [psugihara/FreeChat](https://github.com/psugihara/FreeChat)
 - [ptsochantaris/emeltal](https://github.com/ptsochantaris/emeltal)
+- [iohub/collama](https://github.com/iohub/coLLaMA)
 
 ---
 
