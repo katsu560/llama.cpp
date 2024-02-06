@@ -185,7 +185,7 @@ struct llama_client_slot
     llama_sampling_context *ctx_sampling = nullptr;
 
     int32_t ga_i = 0;   // group-attention state
-    int32_t ga_n = 1;// group-attention factor
+    int32_t ga_n = 1;   // group-attention factor
     int32_t ga_w = 512; // group-attention width
 
     int32_t n_past_se = 0; // self-extend
@@ -219,7 +219,8 @@ struct llama_client_slot
         sent_token_probs_index = 0;
         infill                 = false;
         ga_i                   = 0;
-        n_past_se  = 0;
+        n_past_se              = 0;
+
         generated_token_probs.clear();
 
         for (slot_image & img : images)
@@ -333,6 +334,7 @@ struct llama_server_context
 
     // slots / clients
     std::vector<llama_client_slot> slots;
+    json default_generation_settings_for_props;
 
     llama_server_queue queue_tasks;
     llama_server_response queue_results;
@@ -429,6 +431,10 @@ struct llama_server_context
             slots.push_back(slot);
         }
 
+        default_generation_settings_for_props = get_formated_generation(slots.front());
+        default_generation_settings_for_props["num_slots"] = params.n_parallel;
+        default_generation_settings_for_props["seed"] = -1;
+
         batch = llama_batch_init(n_ctx, 0, params.n_parallel);
 
         // empty system prompt
@@ -519,27 +525,29 @@ struct llama_server_context
             slot->oaicompat_model = "";
         }
 
-        slot->params.stream           = json_value(data, "stream",            false);
-        slot->params.cache_prompt     = json_value(data, "cache_prompt",      false);
-        slot->params.n_predict        = json_value(data, "n_predict",         default_params.n_predict);
-        slot->sparams.top_k           = json_value(data, "top_k",             default_sparams.top_k);
-        slot->sparams.top_p           = json_value(data, "top_p",             default_sparams.top_p);
-        slot->sparams.min_p           = json_value(data, "min_p",             default_sparams.min_p);
-        slot->sparams.tfs_z           = json_value(data, "tfs_z",             default_sparams.tfs_z);
-        slot->sparams.typical_p       = json_value(data, "typical_p",         default_sparams.typical_p);
-        slot->sparams.temp            = json_value(data, "temperature",       default_sparams.temp);
-        slot->sparams.penalty_last_n  = json_value(data, "repeat_last_n",     default_sparams.penalty_last_n);
-        slot->sparams.penalty_repeat  = json_value(data, "repeat_penalty",    default_sparams.penalty_repeat);
-        slot->sparams.penalty_freq    = json_value(data, "frequency_penalty", default_sparams.penalty_freq);
-        slot->sparams.penalty_present = json_value(data, "presence_penalty",  default_sparams.penalty_present);
-        slot->sparams.mirostat        = json_value(data, "mirostat",          default_sparams.mirostat);
-        slot->sparams.mirostat_tau    = json_value(data, "mirostat_tau",      default_sparams.mirostat_tau);
-        slot->sparams.mirostat_eta    = json_value(data, "mirostat_eta",      default_sparams.mirostat_eta);
-        slot->sparams.penalize_nl     = json_value(data, "penalize_nl",       default_sparams.penalize_nl);
-        slot->params.n_keep           = json_value(data, "n_keep",            slot->params.n_keep);
-        slot->params.seed             = json_value(data, "seed",              default_params.seed);
-        slot->sparams.grammar         = json_value(data, "grammar",           default_sparams.grammar);
-        slot->sparams.n_probs         = json_value(data, "n_probs",           default_sparams.n_probs);
+        slot->params.stream             = json_value(data, "stream",            false);
+        slot->params.cache_prompt       = json_value(data, "cache_prompt",      false);
+        slot->params.n_predict          = json_value(data, "n_predict",         default_params.n_predict);
+        slot->sparams.top_k             = json_value(data, "top_k",             default_sparams.top_k);
+        slot->sparams.top_p             = json_value(data, "top_p",             default_sparams.top_p);
+        slot->sparams.min_p             = json_value(data, "min_p",             default_sparams.min_p);
+        slot->sparams.tfs_z             = json_value(data, "tfs_z",             default_sparams.tfs_z);
+        slot->sparams.typical_p         = json_value(data, "typical_p",         default_sparams.typical_p);
+        slot->sparams.temp              = json_value(data, "temperature",       default_sparams.temp);
+        slot->sparams.dynatemp_range    = json_value(data, "dynatemp_range",    default_sparams.dynatemp_range);
+        slot->sparams.dynatemp_exponent = json_value(data, "dynatemp_exponent", default_sparams.dynatemp_exponent);
+        slot->sparams.penalty_last_n    = json_value(data, "repeat_last_n",     default_sparams.penalty_last_n);
+        slot->sparams.penalty_repeat    = json_value(data, "repeat_penalty",    default_sparams.penalty_repeat);
+        slot->sparams.penalty_freq      = json_value(data, "frequency_penalty", default_sparams.penalty_freq);
+        slot->sparams.penalty_present   = json_value(data, "presence_penalty",  default_sparams.penalty_present);
+        slot->sparams.mirostat          = json_value(data, "mirostat",          default_sparams.mirostat);
+        slot->sparams.mirostat_tau      = json_value(data, "mirostat_tau",      default_sparams.mirostat_tau);
+        slot->sparams.mirostat_eta      = json_value(data, "mirostat_eta",      default_sparams.mirostat_eta);
+        slot->sparams.penalize_nl       = json_value(data, "penalize_nl",       default_sparams.penalize_nl);
+        slot->params.n_keep             = json_value(data, "n_keep",            slot->params.n_keep);
+        slot->params.seed               = json_value(data, "seed",              default_params.seed);
+        slot->sparams.grammar           = json_value(data, "grammar",           default_sparams.grammar);
+        slot->sparams.n_probs           = json_value(data, "n_probs",           default_sparams.n_probs);
 
         // infill
         if (data.count("input_prefix") != 0)
@@ -997,6 +1005,8 @@ struct llama_server_context
             {"model",             params.model_alias},
             {"seed",              slot.params.seed},
             {"temperature",       slot.sparams.temp},
+            {"dynatemp_range",    slot.sparams.dynatemp_range},
+            {"dynatemp_exponent", slot.sparams.dynatemp_exponent},
             {"top_k",             slot.sparams.top_k},
             {"top_p",             slot.sparams.top_p},
             {"min_p",             slot.sparams.min_p},
@@ -1158,13 +1168,30 @@ struct llama_server_context
         task.multitask_id = multitask_id;
 
         // when a completion task's prompt array is not a singleton, we split it into multiple requests
-        if (task.data.count("prompt") && task.data.at("prompt").size() > 1)
-        {
-            split_multiprompt_task(task_id, task);
-        }
-
         // otherwise, it's a single-prompt task, we actually queue it
-        queue_tasks.post(task);
+        // if there's numbers in the prompt array it will be treated as an array of tokens
+        if (task.data.count("prompt") != 0 && task.data.at("prompt").size() > 1) {
+            bool numbers = false;
+            for (const auto& e : task.data.at("prompt")) {
+                if (e.is_number()) {
+                    numbers = true;
+                    break;
+                }
+            }
+
+            // NOTE: split_multiprompt_task() does not handle a mix of strings and numbers,
+            // it will completely stall the server. I don't know where the bug for this is.
+            //
+            // if there are numbers, it needs to be treated like a single prompt,
+            // queue_tasks handles a mix of strings and numbers just fine.
+            if (numbers) {
+                queue_tasks.post(task);
+            } else {
+                split_multiprompt_task(task_id, task);
+            }
+        } else {
+            queue_tasks.post(task);
+        }
     }
 
     // for multiple images processing
@@ -1227,7 +1254,7 @@ struct llama_server_context
             std::vector<llama_token> append_tokens = tokenize(json_prompt, false); // has next image
             for (int i = 0; i < (int) append_tokens.size(); ++i)
             {
-                llama_batch_add(batch, append_tokens[i], slot.n_past, { slot.id }, true);
+                llama_batch_add(batch, append_tokens[i], system_tokens.size() + slot.n_past, { slot.id }, true);
                 slot.n_past += 1;
             }
         }
@@ -1246,7 +1273,10 @@ struct llama_server_context
     void split_multiprompt_task(int multitask_id, task_server& multiprompt_task)
     {
         int prompt_count = multiprompt_task.data.at("prompt").size();
-        assert(prompt_count > 1);
+        if (prompt_count <= 1) {
+            send_error(multiprompt_task, "error while handling multiple prompts");
+            return;
+        }
 
         // generate all the ID for subtask
         std::vector<int> subtask_ids(prompt_count);
@@ -1295,6 +1325,8 @@ struct llama_server_context
                     for (llama_client_slot &slot : slots)
                     {
                         slot.cache_tokens.clear();
+                        slot.n_past    = 0;
+                        slot.n_past_se = 0;
                     }
                 }
 
@@ -1364,26 +1396,26 @@ struct llama_server_context
                 kv_cache_clear();
             }
             return true;
-        } else {
-            task_server task;
-            task.type = TASK_TYPE_NEXT_RESPONSE;
-            task.target_id = -1;
-            queue_tasks.post(task);
         }
+
+        task_server task;
+        task.type = TASK_TYPE_NEXT_RESPONSE;
+        task.target_id = -1;
+        queue_tasks.post(task);
 
         for (llama_client_slot &slot : slots)
         {
             if (slot.ga_n == 1)
             {
-                if (slot.is_processing() && slot.cache_tokens.size() >= (size_t) slot.n_ctx)
+                if (slot.is_processing() && system_tokens.size() + slot.cache_tokens.size() >= (size_t) slot.n_ctx)
                 {
                     // Shift context
-                    const int n_left    = slot.n_past - slot.params.n_keep - 1;
+                    const int n_left    = system_tokens.size() + slot.n_past - slot.params.n_keep - 1;
                     const int n_discard = n_left / 2;
 
                     LOG_TEE("slot %d: context shift - n_keep = %d, n_left = %d, n_discard = %d\n", slot.id, slot.params.n_keep, n_left, n_discard);
                     llama_kv_cache_seq_rm   (ctx, slot.id, slot.params.n_keep + 1            , slot.params.n_keep + n_discard + 1);
-                    llama_kv_cache_seq_shift(ctx, slot.id, slot.params.n_keep + 1 + n_discard, slot.n_past, -n_discard);
+                    llama_kv_cache_seq_shift(ctx, slot.id, slot.params.n_keep + 1 + n_discard, system_tokens.size() + slot.n_past, -n_discard);
 
                     for (size_t i = slot.params.n_keep + 1 + n_discard; i < slot.cache_tokens.size(); i++)
                     {
@@ -1429,8 +1461,10 @@ struct llama_server_context
             slot.i_batch = batch.n_tokens;
 
             const int32_t slot_npast = slot.n_past_se > 0 ? slot.n_past_se : slot.n_past;
-            llama_batch_add(batch, slot.sampled, system_tokens.size() + slot_npast, { slot.id }, true);
 
+            // TODO: we always have to take into account the "system_tokens"
+            //       this is not great and needs to be improved somehow
+            llama_batch_add(batch, slot.sampled, system_tokens.size() + slot_npast, { slot.id }, true);
             slot.n_past += 1;
         }
 
@@ -1481,8 +1515,8 @@ struct llama_server_context
 
                         prefix_tokens.insert(prefix_tokens.begin(), llama_token_prefix(model));
                         prefix_tokens.insert(prefix_tokens.begin(), llama_token_bos(model)); // always add BOS
-                        prefix_tokens.insert(prefix_tokens.end(), llama_token_suffix(model));
-                        prefix_tokens.insert(prefix_tokens.end(), suffix_tokens.begin(), suffix_tokens.end());
+                        prefix_tokens.insert(prefix_tokens.end(),   llama_token_suffix(model));
+                        prefix_tokens.insert(prefix_tokens.end(),   suffix_tokens.begin(), suffix_tokens.end());
                         prefix_tokens.push_back(llama_token_middle(model));
                         prompt_tokens = prefix_tokens;
                     }
@@ -1582,8 +1616,8 @@ struct llama_server_context
                     }
 
                     LOG_VERBOSE("prompt ingested", {
-                                                    {"n_past", slot.n_past},
-                                                    {"cached", tokens_to_str(ctx, slot.cache_tokens.cbegin(), slot.cache_tokens.cbegin() + slot.n_past)},
+                                                    {"n_past",  slot.n_past},
+                                                    {"cached",  tokens_to_str(ctx, slot.cache_tokens.cbegin(), slot.cache_tokens.cbegin() + slot.n_past)},
                                                     {"to_eval", tokens_to_str(ctx, slot.cache_tokens.cbegin() + slot.n_past, slot.cache_tokens.cend())},
                                                 });
 
@@ -1591,10 +1625,13 @@ struct llama_server_context
 
                     // process the prefix of first image
                     std::vector<llama_token> prefix_tokens = has_images ? tokenize(slot.images[0].prefix_prompt, add_bos_token) : prompt_tokens;
+
                     int32_t slot_npast = slot.n_past_se > 0 ? slot.n_past_se : slot.n_past;
-                    int ga_i = slot.ga_i;
+
+                    int32_t ga_i = slot.ga_i;
                     int32_t ga_n = slot.ga_n;
                     int32_t ga_w = slot.ga_w;
+
                     for (; slot.n_past < (int) prefix_tokens.size(); ++slot.n_past)
                     {
                         if (slot.ga_n != 1)
@@ -1606,7 +1643,7 @@ struct llama_server_context
                             }
                         }
                         llama_batch_add(batch, prefix_tokens[slot.n_past], system_tokens.size() + slot_npast, {slot.id }, false);
-                        slot_npast += 1;
+                        slot_npast++;
                     }
 
                     if (has_images && !ingest_images(slot, n_batch))
@@ -1666,6 +1703,7 @@ struct llama_server_context
                     slot.n_past_se += n_tokens;
                 }
             }
+
             llama_batch batch_view =
             {
                 n_tokens,
@@ -1780,53 +1818,53 @@ static void server_print_usage(const char *argv0, const gpt_params &params,
     printf("  -b N, --batch-size N      batch size for prompt processing (default: %d)\n", params.n_batch);
     printf("  --memory-f32              use f32 instead of f16 for memory key+value (default: disabled)\n");
     printf("                            not recommended: doubles context memory required and no measurable increase in quality\n");
-    if (llama_mlock_supported())
+    if (llama_supports_mlock())
     {
-        printf("  --mlock               force system to keep model in RAM rather than swapping or compressing\n");
+        printf("  --mlock                   force system to keep model in RAM rather than swapping or compressing\n");
     }
-    if (llama_mmap_supported())
+    if (llama_supports_mmap())
     {
-        printf("  --no-mmap             do not memory-map model (slower load but may reduce pageouts if not using mlock)\n");
+        printf("  --no-mmap                 do not memory-map model (slower load but may reduce pageouts if not using mlock)\n");
     }
-    printf("  --numa                attempt optimizations that help on some NUMA systems\n");
-#ifdef LLAMA_SUPPORTS_GPU_OFFLOAD
-    printf("  -ngl N, --n-gpu-layers N\n");
-    printf("                        number of layers to store in VRAM\n");
-    printf("  -sm SPLIT_MODE, --split-mode SPLIT_MODE\n");
-    printf("                        how to split the model across multiple GPUs, one of:\n");
-    printf("                          - none: use one GPU only\n");
-    printf("                          - layer (default): split layers and KV across GPUs\n");
-    printf("                          - row: split rows across GPUs\n");
-    printf("  -ts SPLIT --tensor-split SPLIT\n");
-    printf("                        fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1\n");
-    printf("  -mg i, --main-gpu i   the GPU to use for the model (with split-mode = none),\n");
-    printf("                        or for intermediate results and KV (with split-mode = row)\n");
-#endif
+    printf("  --numa                    attempt optimizations that help on some NUMA systems\n");
+    if (llama_supports_gpu_offload()) {
+        printf("  -ngl N, --n-gpu-layers N\n");
+        printf("                            number of layers to store in VRAM\n");
+        printf("  -sm SPLIT_MODE, --split-mode SPLIT_MODE\n");
+        printf("                            how to split the model across multiple GPUs, one of:\n");
+        printf("                              - none: use one GPU only\n");
+        printf("                              - layer (default): split layers and KV across GPUs\n");
+        printf("                              - row: split rows across GPUs\n");
+        printf("  -ts SPLIT --tensor-split SPLIT\n");
+        printf("                            fraction of the model to offload to each GPU, comma-separated list of proportions, e.g. 3,1\n");
+        printf("  -mg i, --main-gpu i       the GPU to use for the model (with split-mode = none),\n");
+        printf("                            or for intermediate results and KV (with split-mode = row)\n");
+    }
     printf("  -m FNAME, --model FNAME\n");
-    printf("                        model path (default: %s)\n", params.model.c_str());
+    printf("                            model path (default: %s)\n", params.model.c_str());
     printf("  -a ALIAS, --alias ALIAS\n");
-    printf("                        set an alias for the model, will be added as `model` field in completion response\n");
-    printf("  --lora FNAME          apply LoRA adapter (implies --no-mmap)\n");
-    printf("  --lora-base FNAME     optional model to use as a base for the layers modified by the LoRA adapter\n");
-    printf("  --host                ip address to listen (default  (default: %s)\n", sparams.hostname.c_str());
-    printf("  --port PORT           port to listen (default  (default: %d)\n", sparams.port);
-    printf("  --path PUBLIC_PATH    path from which to serve static files (default %s)\n", sparams.public_path.c_str());
-    printf("  --api-key API_KEY     optional api key to enhance server security. If set, requests must include this key for access.\n");
-    printf("  --api-key-file FNAME  path to file containing api keys delimited by new lines. If set, requests must include one of the keys for access.\n");
-    printf("  -to N, --timeout N    server read/write timeout in seconds (default: %d)\n", sparams.read_timeout);
-    printf("  --embedding           enable embedding vector output (default: %s)\n", params.embedding ? "enabled" : "disabled");
-    printf("  -np N, --parallel N   number of slots for process requests (default: %d)\n", params.n_parallel);
-    printf("  -cb, --cont-batching  enable continuous batching (a.k.a dynamic batching) (default: disabled)\n");
-    printf("    -spf FNAME, --system-prompt-file FNAME\n");
-    printf("                        Set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications.\n");
-    printf("  --mmproj MMPROJ_FILE  path to a multimodal projector file for LLaVA.\n");
-    printf("  --log-disable         disables logging to a file.\n");
+    printf("                            set an alias for the model, will be added as `model` field in completion response\n");
+    printf("  --lora FNAME              apply LoRA adapter (implies --no-mmap)\n");
+    printf("  --lora-base FNAME         optional model to use as a base for the layers modified by the LoRA adapter\n");
+    printf("  --host                    ip address to listen (default  (default: %s)\n", sparams.hostname.c_str());
+    printf("  --port PORT               port to listen (default  (default: %d)\n", sparams.port);
+    printf("  --path PUBLIC_PATH        path from which to serve static files (default %s)\n", sparams.public_path.c_str());
+    printf("  --api-key API_KEY         optional api key to enhance server security. If set, requests must include this key for access.\n");
+    printf("  --api-key-file FNAME      path to file containing api keys delimited by new lines. If set, requests must include one of the keys for access.\n");
+    printf("  -to N, --timeout N        server read/write timeout in seconds (default: %d)\n", sparams.read_timeout);
+    printf("  --embedding               enable embedding vector output (default: %s)\n", params.embedding ? "enabled" : "disabled");
+    printf("  -np N, --parallel N       number of slots for process requests (default: %d)\n", params.n_parallel);
+    printf("  -cb, --cont-batching      enable continuous batching (a.k.a dynamic batching) (default: disabled)\n");
+    printf("  -spf FNAME, --system-prompt-file FNAME\n");
+    printf("                            set a file to load a system prompt (initial prompt of all slots), this is useful for chat applications.\n");
+    printf("  --mmproj MMPROJ_FILE      path to a multimodal projector file for LLaVA.\n");
+    printf("  --log-disable             disables logging to a file.\n");
     printf("\n");
     printf("  --override-kv KEY=TYPE:VALUE\n");
-    printf("                        advanced option to override model metadata by key. may be specified multiple times.\n");
-    printf("                        types: int, float, bool. example: --override-kv tokenizer.ggml.add_bos_token=bool:false\n");
-    printf("  -gan N, --grp-attn-n N    Set the group attention factor to extend context size through self-extend(default: 1=disabled), used together with group attention width `--grp-attn-w`");
-    printf("  -gaw N, --grp-attn-w N    Set the group attention width to extend context size through self-extend(default: 512), used together with group attention factor `--grp-attn-n`");
+    printf("                            advanced option to override model metadata by key. may be specified multiple times.\n");
+    printf("                            types: int, float, bool. example: --override-kv tokenizer.ggml.add_bos_token=bool:false\n");
+    printf("  -gan N, --grp-attn-n N    set the group attention factor to extend context size through self-extend(default: 1=disabled), used together with group attention width `--grp-attn-w`");
+    printf("  -gaw N, --grp-attn-w N    set the group attention width to extend context size through self-extend(default: 512), used together with group attention factor `--grp-attn-n`");
     printf("\n");
 }
 
@@ -1875,7 +1913,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-            sparams.api_keys.push_back(argv[i]);
+            sparams.api_keys.emplace_back(argv[i]);
         }
         else if (arg == "--api-key-file")
         {
@@ -2057,13 +2095,13 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-#ifdef LLAMA_SUPPORTS_GPU_OFFLOAD
-            params.n_gpu_layers = std::stoi(argv[i]);
-#else
-            LOG_WARNING("Not compiled with GPU offload support, --n-gpu-layers option will be ignored. "
+            if (llama_supports_gpu_offload()) {
+                params.n_gpu_layers = std::stoi(argv[i]);
+            } else {
+                LOG_WARNING("Not compiled with GPU offload support, --n-gpu-layers option will be ignored. "
                         "See main README.md for information on enabling GPU BLAS support",
                         {{"n_gpu_layers", params.n_gpu_layers}});
-#endif
+            }
         }
         else if (arg == "--split-mode" || arg == "-sm")
         {
@@ -2099,16 +2137,16 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-#ifdef GGML_USE_CUBLAS
+#if defined(GGML_USE_CUBLAS) || defined(GGML_USE_SYCL)
             std::string arg_next = argv[i];
 
             // split string by , and /
             const std::regex regex{R"([,/]+)"};
             std::sregex_token_iterator it{arg_next.begin(), arg_next.end(), regex, -1};
             std::vector<std::string> split_arg{it, {}};
-            GGML_ASSERT(split_arg.size() <= LLAMA_MAX_DEVICES);
+            GGML_ASSERT(split_arg.size() <= llama_max_devices());
 
-            for (size_t i_device = 0; i_device < LLAMA_MAX_DEVICES; ++i_device)
+            for (size_t i_device = 0; i_device < llama_max_devices(); ++i_device)
             {
                 if (i_device < split_arg.size())
                 {
@@ -2125,7 +2163,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
         }
         else if (arg == "--no-mul-mat-q" || arg == "-nommq")
         {
-#ifdef GGML_USE_CUBLAS
+#if defined(GGML_USE_CUBLAS) || defined(GGML_USE_SYCL)
             params.mul_mat_q = false;
 #else
             LOG_WARNING("warning: llama.cpp was compiled without cuBLAS. Disabling mul_mat_q kernels has no effect.\n", {});
@@ -2138,7 +2176,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-#ifdef GGML_USE_CUBLAS
+#if defined(GGML_USE_CUBLAS) || defined(GGML_USE_SYCL)
             params.main_gpu = std::stoi(argv[i]);
 #else
             LOG_WARNING("llama.cpp was compiled without cuBLAS. It is not possible to set a main GPU.", {});
@@ -2151,7 +2189,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-            params.lora_adapter.push_back(std::make_tuple(argv[i], 1.0f));
+            params.lora_adapter.emplace_back(argv[i], 1.0f);
             params.use_mmap = false;
         }
         else if (arg == "--lora-scaled")
@@ -2167,7 +2205,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
                 invalid_param = true;
                 break;
             }
-            params.lora_adapter.push_back(std::make_tuple(lora_adapter, std::stof(argv[i])));
+            params.lora_adapter.emplace_back(lora_adapter, std::stof(argv[i]));
             params.use_mmap = false;
         }
         else if (arg == "--lora-base")
@@ -2309,7 +2347,7 @@ static void server_params_parse(int argc, char **argv, server_params &sparams,
         }
     }
     if (!params.kv_overrides.empty()) {
-        params.kv_overrides.emplace_back(llama_model_kv_override());
+        params.kv_overrides.emplace_back();
         params.kv_overrides.back().key[0] = 0;
     }
 
@@ -2605,7 +2643,8 @@ int main(int argc, char **argv)
                 res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
                 json data = {
                     { "user_name",      llama.name_user.c_str() },
-                    { "assistant_name", llama.name_assistant.c_str() }
+                    { "assistant_name", llama.name_assistant.c_str() },
+                    { "default_generation_settings", llama.default_generation_settings_for_props }
                 };
                 res.set_content(data.dump(), "application/json; charset=utf-8");
             });
@@ -2927,6 +2966,66 @@ int main(int argc, char **argv)
 
                 // send the result
                 return res.set_content(result.result_json.dump(), "application/json; charset=utf-8");
+            });
+
+    svr.Post("/v1/embeddings", [&llama](const httplib::Request &req, httplib::Response &res)
+            {
+                res.set_header("Access-Control-Allow-Origin", req.get_header_value("Origin"));
+                const json body = json::parse(req.body);
+
+                json prompt;
+                if (body.count("input") != 0)
+                {
+                    prompt = body["input"];
+                    // batch
+                    if(prompt.is_array()) {
+                        json data = json::array();
+                        int i = 0;
+                        for (const json &elem : prompt) {
+                            const int task_id = llama.queue_tasks.get_new_id();
+                            llama.queue_results.add_waiting_task_id(task_id);
+                            llama.request_completion(task_id, { {"prompt", elem}, { "n_predict", 0} }, false, true, -1);
+
+                            // get the result
+                            task_result result = llama.queue_results.recv(task_id);
+                            llama.queue_results.remove_waiting_task_id(task_id);
+
+                            json embedding = json{
+                                {"embedding", json_value(result.result_json, "embedding", json::array())},
+                                {"index", i++},
+                                {"object", "embedding"}
+                            };
+                            data.push_back(embedding);
+                        }
+                        json result = format_embeddings_response_oaicompat(body, data);
+                        return res.set_content(result.dump(), "application/json; charset=utf-8");
+                    }
+                }
+                else
+                {
+                    prompt = "";
+                }
+
+                // create and queue the task
+                const int task_id = llama.queue_tasks.get_new_id();
+                llama.queue_results.add_waiting_task_id(task_id);
+                llama.request_completion(task_id, { {"prompt", prompt}, { "n_predict", 0}}, false, true, -1);
+
+                // get the result
+                task_result result = llama.queue_results.recv(task_id);
+                llama.queue_results.remove_waiting_task_id(task_id);
+
+                json data = json::array({json{
+                        {"embedding", json_value(result.result_json, "embedding", json::array())},
+                        {"index", 0},
+                        {"object", "embedding"}
+                    }}
+                );
+
+                json root = format_embeddings_response_oaicompat(body, data);
+
+                // send the result
+                return res.set_content(root.dump(), "application/json; charset=utf-8");
             });
 
     // GG: if I put the main loop inside a thread, it crashes on the first request when build in Debug!?

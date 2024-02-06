@@ -6,11 +6,13 @@
 
 [Roadmap](https://github.com/users/ggerganov/projects/7) / [Project status](https://github.com/ggerganov/llama.cpp/discussions/3471) / [Manifesto](https://github.com/ggerganov/llama.cpp/discussions/205) / [ggml](https://github.com/ggerganov/ggml)
 
-Inference of [LLaMA](https://arxiv.org/abs/2302.13971) model in pure C/C++
+Inference of Meta's [LLaMA](https://arxiv.org/abs/2302.13971) model (and others) in pure C/C++
 
 ### Hot topics
 
-- ⚠️ Incoming backends: https://github.com/ggerganov/llama.cpp/discussions/5138
+- Remove LLAMA_MAX_DEVICES and LLAMA_SUPPORTS_GPU_OFFLOAD: https://github.com/ggerganov/llama.cpp/pull/5240
+- Incoming backends: https://github.com/ggerganov/llama.cpp/discussions/5138
+  - [SYCL backend](README-sycl.md) is ready (1/28/2024), support Linux/Windows in Intel GPUs (iGPU, Arc/Flex/Max series)
 - New SOTA quantized models, including pure 2-bits: https://huggingface.co/ikawrakow
 - Collecting Apple Silicon performance stats:
   - M-series: https://github.com/ggerganov/llama.cpp/discussions/4167
@@ -56,18 +58,20 @@ Inference of [LLaMA](https://arxiv.org/abs/2302.13971) model in pure C/C++
 
 ## Description
 
-The main goal of `llama.cpp` is to run the LLaMA model using 4-bit integer quantization on a MacBook
+The main goal of `llama.cpp` is to enable LLM inference with minimal setup and state-of-the-art performance on a wide
+variety of hardware - locally and in the cloud.
 
-- Plain C/C++ implementation without dependencies
-- Apple silicon first-class citizen - optimized via ARM NEON, Accelerate and Metal frameworks
+- Plain C/C++ implementation without any dependencies
+- Apple silicon is a first-class citizen - optimized via ARM NEON, Accelerate and Metal frameworks
 - AVX, AVX2 and AVX512 support for x86 architectures
-- Mixed F16 / F32 precision
-- 2-bit, 3-bit, 4-bit, 5-bit, 6-bit and 8-bit integer quantization support
-- CUDA, Metal and OpenCL GPU backend support
+- 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit integer quantization for faster inference and reduced memory use
+- Custom CUDA kernels for running LLMs on NVIDIA GPUs (support for AMD GPUs via HIP)
+- Vulkan, SYCL, and (partial) OpenCL backend support
+- CPU+GPU hybrid inference to partially accelerate models larger than the total VRAM capacity
 
-The original implementation of `llama.cpp` was [hacked in an evening](https://github.com/ggerganov/llama.cpp/issues/33#issuecomment-1465108022).
-Since then, the project has improved significantly thanks to many contributions. This project is mainly for educational purposes and serves
-as the main playground for developing new features for the [ggml](https://github.com/ggerganov/ggml) library.
+Since its [inception](https://github.com/ggerganov/llama.cpp/issues/33#issuecomment-1465108022), the project has
+improved significantly thanks to many contributions. It is the main playground for developing new features for the
+[ggml](https://github.com/ggerganov/ggml) library.
 
 **Supported platforms:**
 
@@ -75,11 +79,14 @@ as the main playground for developing new features for the [ggml](https://github
 - [X] Linux
 - [X] Windows (via CMake)
 - [X] Docker
+- [X] FreeBSD
 
 **Supported models:**
 
 - [X] LLaMA 🦙
 - [x] LLaMA 2 🦙🦙
+- [X] [Mistral AI v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+- [x] [Mixtral MoE](https://huggingface.co/models?search=mistral-ai/Mixtral)
 - [X] Falcon
 - [X] [Alpaca](https://github.com/ggerganov/llama.cpp#instruction-mode-with-alpaca)
 - [X] [GPT4All](https://github.com/ggerganov/llama.cpp#using-gpt4all)
@@ -93,26 +100,29 @@ as the main playground for developing new features for the [ggml](https://github
 - [X] [Baichuan 1 & 2](https://huggingface.co/models?search=baichuan-inc/Baichuan) + [derivations](https://huggingface.co/hiyouga/baichuan-7b-sft)
 - [X] [Aquila 1 & 2](https://huggingface.co/models?search=BAAI/Aquila)
 - [X] [Starcoder models](https://github.com/ggerganov/llama.cpp/pull/3187)
-- [X] [Mistral AI v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 - [X] [Refact](https://huggingface.co/smallcloudai/Refact-1_6B-fim)
 - [X] [Persimmon 8B](https://github.com/ggerganov/llama.cpp/pull/3410)
 - [X] [MPT](https://github.com/ggerganov/llama.cpp/pull/3417)
 - [X] [Bloom](https://github.com/ggerganov/llama.cpp/pull/3553)
 - [x] [Yi models](https://huggingface.co/models?search=01-ai/Yi)
-- [X] [StableLM-3b-4e1t](https://github.com/ggerganov/llama.cpp/pull/3586)
+- [X] [StableLM models](https://huggingface.co/stabilityai)
 - [x] [Deepseek models](https://huggingface.co/models?search=deepseek-ai/deepseek)
 - [x] [Qwen models](https://huggingface.co/models?search=Qwen/Qwen)
-- [x] [Mixtral MoE](https://huggingface.co/models?search=mistral-ai/Mixtral)
 - [x] [PLaMo-13B](https://github.com/ggerganov/llama.cpp/pull/3557)
+- [x] [Phi models](https://huggingface.co/models?search=microsoft/phi)
 - [x] [GPT-2](https://huggingface.co/gpt2)
+- [x] [Orion 14B](https://github.com/ggerganov/llama.cpp/pull/5118)
+- [x] [InternLM2](https://huggingface.co/models?search=internlm2)
+- [x] [CodeShell](https://github.com/WisdomShell/codeshell)
 
 **Multimodal models:**
 
-- [x] [Llava 1.5 models](https://huggingface.co/collections/liuhaotian/llava-15-653aac15d994e992e2677a7e)
-- [x] [Bakllava](https://huggingface.co/models?search=SkunkworksAI/Bakllava)
+- [x] [LLaVA 1.5 models](https://huggingface.co/collections/liuhaotian/llava-15-653aac15d994e992e2677a7e)
+- [x] [BakLLaVA](https://huggingface.co/models?search=SkunkworksAI/Bakllava)
 - [x] [Obsidian](https://huggingface.co/NousResearch/Obsidian-3B-V0.5)
 - [x] [ShareGPT4V](https://huggingface.co/models?search=Lin-Chen/ShareGPT4V)
 - [x] [MobileVLM 1.7B/3B models](https://huggingface.co/models?search=mobileVLM)
+- [x] [Yi-VL](https://huggingface.co/models?search=Yi-VL)
 
 
 **Bindings:**
@@ -122,7 +132,8 @@ as the main playground for developing new features for the [ggml](https://github
 - Node.js: [withcatai/node-llama-cpp](https://github.com/withcatai/node-llama-cpp)
 - JS/TS (llama.cpp server client): [lgrammel/modelfusion](https://modelfusion.dev/integration/model-provider/llamacpp)
 - Ruby: [yoshoku/llama_cpp.rb](https://github.com/yoshoku/llama_cpp.rb)
-- Rust: [mdrokz/rust-llama.cpp](https://github.com/mdrokz/rust-llama.cpp)
+- Rust (nicer API): [mdrokz/rust-llama.cpp](https://github.com/mdrokz/rust-llama.cpp)
+- Rust (more direct bindings): [utilityai/llama-cpp-rs](https://github.com/utilityai/llama-cpp-rs)
 - C#/.NET: [SciSharp/LLamaSharp](https://github.com/SciSharp/LLamaSharp)
 - Scala 3: [donderom/llm4s](https://github.com/donderom/llm4s)
 - Clojure: [phronmophobic/llama.clj](https://github.com/phronmophobic/llama.clj)
@@ -133,13 +144,22 @@ as the main playground for developing new features for the [ggml](https://github
 
 **UI:**
 
+Unless otherwise noted these projects are open-source with permissive licensing:
+
+- [iohub/collama](https://github.com/iohub/coLLaMA)
+- [janhq/jan](https://github.com/janhq/jan) (AGPL)
 - [nat/openplayground](https://github.com/nat/openplayground)
-- [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui)
-- [withcatai/catai](https://github.com/withcatai/catai)
-- [semperai/amica](https://github.com/semperai/amica)
+- [LMStudio](https://lmstudio.ai/) (proprietary)
+- [LostRuins/koboldcpp](https://github.com/LostRuins/koboldcpp) (AGPL)
+- [Mozilla-Ocho/llamafile](https://github.com/Mozilla-Ocho/llamafile)
+- [nomic-ai/gpt4all](https://github.com/nomic-ai/gpt4all)
+- [ollama/ollama](https://github.com/ollama/ollama)
+- [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) (AGPL)
 - [psugihara/FreeChat](https://github.com/psugihara/FreeChat)
 - [ptsochantaris/emeltal](https://github.com/ptsochantaris/emeltal)
-- [iohub/collama](https://github.com/iohub/coLLaMA)
+- [pythops/tenere](https://github.com/pythops/tenere) (AGPL)
+- [semperai/amica](https://github.com/semperai/amica)
+- [withcatai/catai](https://github.com/withcatai/catai)
 
 ---
 
@@ -290,7 +310,7 @@ In order to build llama.cpp you have three different options.
         sudo pkg install gmake automake autoconf pkgconf llvm15 clinfo clover \
             opencl clblast openblas
 
-            gmake CC=/usr/local/bin/clang15 CXX=/usr/local/bin/clang++15 -j4
+        gmake CC=/usr/local/bin/clang15 CXX=/usr/local/bin/clang++15 -j4
         ```
 
     **Notes:** With this packages you can build llama.cpp with OPENBLAS and
@@ -390,28 +410,28 @@ Building the program with BLAS support may lead to some performance improvements
 
   Check [BLIS.md](docs/BLIS.md) for more information.
 
+- #### SYCL
+  SYCL is a higher-level programming model to improve programming productivity on various hardware accelerators.
+
+  llama.cpp based on SYCL is used to **support Intel GPU** (Data Center Max series, Flex series, Arc series, Built-in GPU and iGPU).
+
+  For detailed info, please refer to [llama.cpp for SYCL](README-sycl.md).
+
 - #### Intel oneMKL
+  Building through oneAPI compilers will make avx_vnni instruction set available for intel processors that do not support avx512 and avx512_vnni. Please note that this build config **does not support Intel GPU**. For Intel GPU support, please refer to [llama.cpp for SYCL](./README-sycl.md).
+
   - Using manual oneAPI installation:
     By default, `LLAMA_BLAS_VENDOR` is set to `Generic`, so if you already sourced intel environment script and assign `-DLLAMA_BLAS=ON` in cmake, the mkl version of Blas will automatically been selected. Otherwise please install oneAPI and follow the below steps:
       ```bash
       mkdir build
       cd build
-      source /opt/intel/oneapi/setvars.sh # You can skip this step if  in oneapi-runtime docker image, only required for manual installation
+      source /opt/intel/oneapi/setvars.sh # You can skip this step if  in oneapi-basekit docker image, only required for manual installation
       cmake .. -DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=Intel10_64lp -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DLLAMA_NATIVE=ON
       cmake --build . --config Release
       ```
 
   - Using oneAPI docker image:
-    If you do not want to source the environment vars and install oneAPI manually, you can also build the code using intel docker container: [oneAPI-runtime](https://hub.docker.com/r/intel/oneapi-runtime)
-
-      ```bash
-      mkdir build
-      cd build
-      cmake .. -DLLAMA_BLAS=ON -DLLAMA_BLAS_VENDOR=Intel10_64lp -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DLLAMA_NATIVE=ON
-      cmake --build . --config Release
-      ```
-
-  Building through oneAPI compilers will make avx_vnni instruction set available for intel processors that do not support avx512 and avx512_vnni.
+    If you do not want to source the environment vars and install oneAPI manually, you can also build the code using intel docker container: [oneAPI-basekit](https://hub.docker.com/r/intel/oneapi-basekit). Then, you can use the commands given above.
 
   Check [Optimizing and Running LLaMA2 on Intel® CPU](https://www.intel.com/content/www/us/en/content-details/791610/optimizing-and-running-llama2-on-intel-cpu.html) for more information.
 
@@ -598,15 +618,58 @@ Building the program with BLAS support may lead to some performance improvements
 
   You can get a list of platforms and devices from the `clinfo -l` command, etc.
 
+- #### Vulkan
+
+  **With docker**:
+
+  You don't need to install Vulkan SDK. It will be installed inside the container.
+
+  ```sh
+  # Build the image
+  docker build -t llama-cpp-vulkan -f .devops/main-vulkan.Dockerfile .
+
+  # Then, use it:
+  docker run -it --rm -v "$(pwd):/app:Z" --device /dev/dri/renderD128:/dev/dri/renderD128 --device /dev/dri/card1:/dev/dri/card1 llama-cpp-vulkan -m "/app/models/YOUR_MODEL_FILE" -p "Building a website can be done in 10 simple steps:" -n 400 -e -ngl 33
+  ```
+
+  **Without docker**:
+
+  Firstly, you need to make sure you installed [Vulkan SDK](https://vulkan.lunarg.com/doc/view/latest/linux/getting_started_ubuntu.html)
+
+  For example, on Ubuntu 22.04 (jammy), use the command below:
+
+  ```bash
+  wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | apt-key add -
+  wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+  apt update -y
+  apt-get install -y vulkan-sdk
+  # To verify the installation, use the command below:
+  vulkaninfo
+  ```
+
+  Then, build llama.cpp using the cmake command below:
+
+  ```bash
+  mkdir -p build
+  cd build
+  cmake .. -DLLAMA_VULKAN=1
+  cmake --build . --config Release
+  # Test the output binary (with "-ngl 33" to offload all layers to GPU)
+  ./bin/main -m "PATH_TO_MODEL" -p "Hi you how are you" -n 50 -e -ngl 33 -t 4
+
+  # You should see in the output, ggml_vulkan detected your GPU. For example:
+  # ggml_vulkan: Using Intel(R) Graphics (ADL GT2) | uma: 1 | fp16: 1 | warp size: 32
+  ```
+
 ### Prepare Data & Run
 
 ```bash
 # obtain the original LLaMA model weights and place them in ./models
 ls ./models
 65B 30B 13B 7B tokenizer_checklist.chk tokenizer.model
-  # [Optional] for models using BPE tokenizers
-  ls ./models
-  65B 30B 13B 7B vocab.json
+# [Optional] for models using BPE tokenizers
+ls ./models
+65B 30B 13B 7B vocab.json
 
 # install Python dependencies
 python3 -m pip install -r requirements.txt
@@ -614,8 +677,8 @@ python3 -m pip install -r requirements.txt
 # convert the 7B model to ggml FP16 format
 python3 convert.py models/7B/
 
-  # [Optional] for models using BPE tokenizers
-  python convert.py models/7B/ --vocabtype bpe
+# [Optional] for models using BPE tokenizers
+python convert.py models/7B/ --vocabtype bpe
 
 # quantize the model to 4-bits (using q4_0 method)
 ./quantize ./models/7B/ggml-model-f16.gguf ./models/7B/ggml-model-q4_0.gguf q4_0
@@ -931,17 +994,20 @@ Place your desired model into the `~/llama.cpp/models/` directory and execute th
 * Create a folder to store big models & intermediate files (ex. /llama/models)
 
 #### Images
-We have two Docker images available for this project:
+We have three Docker images available for this project:
 
 1. `ghcr.io/ggerganov/llama.cpp:full`: This image includes both the main executable file and the tools to convert LLaMA models into ggml and convert into 4-bit quantization. (platforms: `linux/amd64`, `linux/arm64`)
 2. `ghcr.io/ggerganov/llama.cpp:light`: This image only includes the main executable file. (platforms: `linux/amd64`, `linux/arm64`)
+3. `ghcr.io/ggerganov/llama.cpp:server`: This image only includes the server executabhle file. (platforms: `linux/amd64`, `linux/arm64`)
 
 Additionally, there the following images, similar to the above:
 
 - `ghcr.io/ggerganov/llama.cpp:full-cuda`: Same as `full` but compiled with CUDA support. (platforms: `linux/amd64`)
 - `ghcr.io/ggerganov/llama.cpp:light-cuda`: Same as `light` but compiled with CUDA support. (platforms: `linux/amd64`)
+- `ghcr.io/ggerganov/llama.cpp:server-cuda`: Same as `server` but compiled with CUDA support. (platforms: `linux/amd64`)
 - `ghcr.io/ggerganov/llama.cpp:full-rocm`: Same as `full` but compiled with ROCm support. (platforms: `linux/amd64`, `linux/arm64`)
 - `ghcr.io/ggerganov/llama.cpp:light-rocm`: Same as `light` but compiled with ROCm support. (platforms: `linux/amd64`, `linux/arm64`)
+- `ghcr.io/ggerganov/llama.cpp:server-rocm`: Same as `server` but compiled with ROCm support. (platforms: `linux/amd64`, `linux/arm64`)
 
 The GPU enabled images are not currently tested by CI beyond being built. They are not built with any variation from the ones in the Dockerfiles defined in [.devops/](.devops/) and the GitHub Action defined in [.github/workflows/docker.yml](.github/workflows/docker.yml). If you need different settings (for example, a different CUDA or ROCm library, you'll need to build the images locally for now).
 
@@ -967,6 +1033,12 @@ or with a light image:
 docker run -v /path/to/models:/models ghcr.io/ggerganov/llama.cpp:light -m /models/7B/ggml-model-q4_0.gguf -p "Building a website can be done in 10 simple steps:" -n 512
 ```
 
+or with a server image:
+
+```bash
+docker run -v /path/to/models:/models -p 8000:8000 ghcr.io/ggerganov/llama.cpp:server -m /models/7B/ggml-model-q4_0.gguf --port 8000 --host 0.0.0.0 -n 512
+```
+
 ### Docker With CUDA
 
 Assuming one has the [nvidia-container-toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) properly installed on Linux, or is using a GPU enabled cloud, `cuBLAS` should be accessible inside the container.
@@ -976,6 +1048,7 @@ Assuming one has the [nvidia-container-toolkit](https://github.com/NVIDIA/nvidia
 ```bash
 docker build -t local/llama.cpp:full-cuda -f .devops/full-cuda.Dockerfile .
 docker build -t local/llama.cpp:light-cuda -f .devops/main-cuda.Dockerfile .
+docker build -t local/llama.cpp:server-cuda -f .devops/server-cuda.Dockerfile .
 ```
 
 You may want to pass in some different `ARGS`, depending on the CUDA environment supported by your container host, as well as the GPU architecture.
@@ -989,6 +1062,7 @@ The resulting images, are essentially the same as the non-CUDA images:
 
 1. `local/llama.cpp:full-cuda`: This image includes both the main executable file and the tools to convert LLaMA models into ggml and convert into 4-bit quantization.
 2. `local/llama.cpp:light-cuda`: This image only includes the main executable file.
+3. `local/llama.cpp:server-cuda`: This image only includes the server executable file.
 
 #### Usage
 
@@ -997,6 +1071,7 @@ After building locally, Usage is similar to the non-CUDA examples, but you'll ne
 ```bash
 docker run --gpus all -v /path/to/models:/models local/llama.cpp:full-cuda --run -m /models/7B/ggml-model-q4_0.gguf -p "Building a website can be done in 10 simple steps:" -n 512 --n-gpu-layers 1
 docker run --gpus all -v /path/to/models:/models local/llama.cpp:light-cuda -m /models/7B/ggml-model-q4_0.gguf -p "Building a website can be done in 10 simple steps:" -n 512 --n-gpu-layers 1
+docker run --gpus all -v /path/to/models:/models local/llama.cpp:server-cuda -m /models/7B/ggml-model-q4_0.gguf --port 8000 --host 0.0.0.0 -n 512 --n-gpu-layers 1
 ```
 
 ### Contributing
