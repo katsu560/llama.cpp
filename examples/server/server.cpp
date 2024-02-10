@@ -432,7 +432,6 @@ struct llama_server_context
         }
 
         default_generation_settings_for_props = get_formated_generation(slots.front());
-        default_generation_settings_for_props["num_slots"] = params.n_parallel;
         default_generation_settings_for_props["seed"] = -1;
 
         batch = llama_batch_init(n_ctx, 0, params.n_parallel);
@@ -988,11 +987,6 @@ struct llama_server_context
         res.error = true;
         res.result_json = { { "content", error } };
         queue_results.send(res);
-    }
-
-    json get_model_props()
-    {
-        return get_formated_generation(slots[0]);
     }
 
     json get_formated_generation(llama_client_slot &slot)
@@ -1598,10 +1592,6 @@ struct llama_server_context
                         LOG_TEE("slot %d : in cache: %i tokens | to process: %i tokens\n", slot.id, slot.n_past, slot.num_prompt_tokens_processed);
                     }
 
-                    LOG_TEE("slot %d : kv cache rm - [%d, end)\n", slot.id, (int) system_tokens.size() + slot.n_past);
-
-                    llama_kv_cache_seq_rm(ctx, slot.id, system_tokens.size() + slot.n_past, -1);
-
                     slot.cache_tokens = prompt_tokens;
 
                     if (slot.n_past == slot.num_prompt_tokens && slot.n_past > 0)
@@ -1614,6 +1604,10 @@ struct llama_server_context
                             slot.n_past_se--;
                         }
                     }
+
+                    LOG_TEE("slot %d : kv cache rm - [%d, end)\n", slot.id, (int) system_tokens.size() + slot.n_past);
+
+                    llama_kv_cache_seq_rm(ctx, slot.id, system_tokens.size() + slot.n_past, -1);
 
                     LOG_VERBOSE("prompt ingested", {
                                                     {"n_past",  slot.n_past},
@@ -2644,7 +2638,8 @@ int main(int argc, char **argv)
                 json data = {
                     { "user_name",      llama.name_user.c_str() },
                     { "assistant_name", llama.name_assistant.c_str() },
-                    { "default_generation_settings", llama.default_generation_settings_for_props }
+                    { "default_generation_settings", llama.default_generation_settings_for_props },
+                    { "total_slots",    llama.params.n_parallel }
                 };
                 res.set_content(data.dump(), "application/json; charset=utf-8");
             });
@@ -2893,12 +2888,6 @@ int main(int argc, char **argv)
 
                     res.set_chunked_content_provider("text/event-stream", chunked_content_provider, on_complete);
                 }
-            });
-
-    svr.Get("/model.json", [&llama](const httplib::Request &, httplib::Response &res)
-            {
-                const json data = llama.get_model_props();
-                return res.set_content(data.dump(), "application/json; charset=utf-8");
             });
 
     svr.Options(R"(/.*)", [](const httplib::Request &, httplib::Response &res)
