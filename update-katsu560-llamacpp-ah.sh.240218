@@ -1751,8 +1751,8 @@ do_cp()
 	fi
 }
 
-# func:do_cmk ver: 2024.01.03
-# do cmake .. CMKOPT
+# func:do_cmk ver: 2024.02.18
+# do cmake .. CMKOPT CMKOPT2
 # do_cmk
 do_cmk()
 {
@@ -1769,9 +1769,9 @@ do_cmk()
 			rm CMakeCache.txt
 		fi
 	fi
-	msg "cmake .. $CMKOPT"
+	msg "cmake .. $CMKOPT $CMKOPT2"
 	if [ $NOEXEC -eq $RET_FALSE ]; then
-		cmake .. $CMKOPT || die 231 "cmake failed"
+		cmake .. $CMKOPT $CMKOPT2 || die 231 "cmake failed"
 	fi
 	chk_and_cp -p Makefile $DIRNAME/Makefile.build
 
@@ -2510,7 +2510,7 @@ done
 if [ x"$CMKOPT" = x"" ]; then
 	CMKOPT="$CMKOPTAVX"
 fi
-CMKOPT="$CMKOPT $CMKOPT2"
+#CMKOPT="$CMKOPT $CMKOPT2"
 
 # token
 if [ x"$1" = x"token" ]; then
@@ -2528,6 +2528,8 @@ DIRNAME="$1"
 BRANCH="$2"
 CMD="$3"
 shift 2
+ADDINTEL=$RET_FALSE
+ADDSYCL=$RET_FALSE
 
 xmsg "VERBOSE:$VERBOSE NOEXEC:$NOEXEC FORCE:$FORCE NODIE:$NODIE NOCOPY:$NOCOPY"
 xmsg "NOCLEAN:$NOCLEAN TIMESTAMPS:$TIMESTAMPS"
@@ -2649,16 +2651,23 @@ do
 	CMD="$1"
 	xmsg "cmdloop: CMD:$CMD"
 
-	# check
-	if [ $INTELONEAPI -eq $RET_TRUE ]; then
+	# check intel
+	msg "INTELONEAPI:$INTELONEAPI SYCL:$SYCL"
+	if [ $INTELONEAPI -eq $RET_TRUE -a $ADDINTEL -eq $RET_FALSE ]; then
 		chk_inteloneapi || die $? "can't use Intel oneAPI compiler, exit"
-
-		# sycl
-		if [ $SYCL -eq $RET_TRUE ]; then
-			cmd sycl-ls || die $? "can't use sycl-ls, exit"
-			CMKOPT2="$CMKOPT2 -DLLAMA_SYCL=ON -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx"
-		fi
+		CMKOPT2="$CMKOPT2 -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx"
+		msg "updated CMKOPT2:$CMKOPT2"
+		ADDINTEL=$RET_TRUE
 	fi
+	# sycl
+	if [ $SYCL -eq $RET_TRUE -a $ADDSYCL -eq $RET_FALSE -a $ADDINTEL -eq $RET_TRUE ]; then
+		cmd sycl-ls || die $? "can't use sycl-ls, exit"
+		CMKOPT2="$CMKOPT2 -DLLAMA_SYCL=ON"
+		msg "updated CMKOPT2:$CMKOPT2"
+		ADDSYCL=$RET_TRUE
+	fi
+	msg "CMKOPT:$CMKOPT"
+	msg "CMKOPT2:$CMKOPT2"
 
 	case $CMD in
 	*sync*)		do_sync; cd_buildpath; do_mk_script;;
