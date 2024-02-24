@@ -1819,8 +1819,10 @@ ST==3 && /^tests\// { T=$0; T1=$1; sub(/^tests\//,"",T1); sub(/:$/,"",T1); if (i
 TESTENV="GGML_NLOOP=1 GGML_NTHREADS=4"
 
 PROMPT="Building a website can be done in 10 simple steps:"
-PROMPTCHAT="Tell me about FIFA worldcup 2022 Qatar. What country win the match?"
+#PROMPTCHAT="Tell me about FIFA worldcup 2022 Qatar. What country win the match?"
+PROMPTCHAT="### Instruction: What is the height of Mount Fuji?"
 PROMPTJP="日本語で回答ください。京都について教えてください"
+PROMPTCHATJP="### Intstruction: Answer in Japanese. 日本語で回答ください。富士山の高さは何メートルですか？"
 SEEDOPT=1681527203
 SEED=
 #MAINOPT="--log-disable"
@@ -2436,11 +2438,12 @@ do_bin()
 	XSEED=$SEEDOPT
 	PROMPTTXT=`eval echo '$'${VARPROMPT}`
 
-	# walmup
+	msg "#"
+	# warmup
 	get_physpath PHYSPATH "$XMODEL"
+	msg "ls -l $PHYSPATH"
 	ls -l $PHYSPATH
 
-	msg "#"
 	msg "./$DIRNAME/$XDOBIN -m $XMODEL $DOOPT -s $XSEED -p \"$PROMPTTXT\""
 	if [ $NOEXEC -eq $RET_FALSE ]; then
 		./$DIRNAME/$XDOBIN -m $XMODEL $DOOPT -s $XSEED -p "$PROMPTTXT"
@@ -2538,26 +2541,29 @@ do_main()
 			chk_level $LEVELMIN do_bin main ../models/7B/ggml-model-q4_0.bin PROMPT "$MAINOPT"
 
 		elif [ -f ./$DIRNAME/main ]; then
+			LEVELMIN2=2
 			# gguf since 2023.8
 			#msg "./$DIRNAME/main -m ../models/llama-2-7b.Q2_K.gguf $MAINOPT -s $SEED -p \"$PROMPT\""
 			chk_level $LEVELSTD do_bin main ../models/llama-2-7b.Q2_K.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELMAX do_bin main ../models/llama-2-7b.Q3_K_S.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELMAX do_bin main ../models/llama-2-7b.Q4_0.gguf PROMPT "$MAINOPT"
-			chk_level $LEVELMIN do_bin main ../models/llama-2-7b.Q4_K_M.gguf PROMPT "$MAINOPT"
+			chk_level $LEVELMIN2 do_bin main ../models/llama-2-7b.Q4_K_M.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELMAX do_bin main ../models/llama-2-7b.Q5_0.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELMAX do_bin main ../models/llama-2-7b.Q5_K_S.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELSTD do_bin main ../models/llama-2-7b.Q5_K_M.gguf PROMPT "$MAINOPT"
 			chk_level $LEVELMAX do_bin main ../models/llama-2-7b.Q6_0.gguf PROMPT "$MAINOPT"
-			chk_level $LEVELMIN do_bin main ../models/llama-2-7b.Q8_0.gguf PROMPT "$MAINOPT"
+			chk_level $LEVELMIN do_bin main ../models/llama-2-7b.Q8_0-local.gguf PROMPT "$MAINOPT"
+			chk_level $LEVELMIN2 do_bin main ../models/llama-2-7b.Q8_0.gguf PROMPT "$MAINOPT"
 			#
 			#msg "./$DIRNAME/main -m ../models/llama-2-7b-chat.Q2_K.gguf $MAINOPT -s $SEED -p \"$PROMPTCHAT\""
 			chk_level $LEVELSTD do_bin main ../models/llama-2-7b-chat.Q2_K.gguf PROMPTCHAT "$MAINOPT"
-			chk_level $LEVELMIN do_bin main ../models/llama-2-7b-chat.Q4_K_M.gguf PROMPTCHAT "$MAINOPT"
-			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q6_K.gguf PROMPTJP "$MAINOPT"
-			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q3_K_S.gguf PROMPTJP "$MAINOPT"
-			chk_level $LEVELSTD do_bin main ../models/llama-2-7b-chat.Q3_K_M.gguf PROMPTJP "$MAINOPT"
-			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q5_K_M.gguf PROMPTJP "$MAINOPT"
-			chk_level $LEVELMIN do_bin main ../models/llama-2-7b-chat.Q8_0.gguf PROMPTJP "$MAINOPT"
+			chk_level $LEVELMIN2 do_bin main ../models/llama-2-7b-chat.Q4_K_M.gguf PROMPTCHAT "$MAINOPT"
+			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q6_K.gguf PROMPTCHATJP "$MAINOPT"
+			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q3_K_S.gguf PROMPTCHATJP "$MAINOPT"
+			chk_level $LEVELSTD do_bin main ../models/llama-2-7b-chat.Q3_K_M.gguf PROMPTCHATJP "$MAINOPT"
+			chk_level $LEVELMAX do_bin main ../models/llama-2-7b-chat.Q5_K_M.gguf PROMPTCHATJP "$MAINOPT"
+			chk_level $LEVELMIN do_bin main ../models/llama-2-7b-chat.Q8_0-local.gguf PROMPTCHATJP "$MAINOPT"
+			chk_level $LEVELMIN2 do_bin main ../models/llama-2-7b-chat.Q8_0.gguf PROMPTCHATJP "$MAINOPT"
 		else
 			msg "no ./$DIRNAME/main, skip executing main"
 		fi
