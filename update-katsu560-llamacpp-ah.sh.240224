@@ -2414,7 +2414,7 @@ git_script()
 }
 #msg "git_script"; NOEXEC=$RET_TRUE; VERBOSE=2; git_script; exit 0
 
-# func:do_bin ver: 2024.01.28
+# func:do_bin ver: 2024.02.24
 # execute DOBIN with MODEL, VARPROMPT, DOOPT
 # do_bin DOBIN MODEL VARPROMPT DOOPT
 do_bin()
