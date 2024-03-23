@@ -36,7 +36,9 @@ class SentencePieceTokenTypes(IntEnum):
     UNUSED = 5
     BYTE = 6
 
+
 AnyModel = TypeVar("AnyModel", bound="type[Model]")
+
 
 class Model(ABC):
     _model_classes: dict[str, type[Model]] = {}
@@ -91,31 +93,42 @@ class Model(ABC):
 
         if (n_ctx := self.find_hparam(["max_position_embeddings", "n_ctx"], optional=True)) is not None:
             self.gguf_writer.add_context_length(n_ctx)
+            print(f"gguf: context length = {n_ctx}")
 
         n_embd = self.find_hparam(["hidden_size", "n_embd"])
         self.gguf_writer.add_embedding_length(n_embd)
+        print(f"gguf: embedding length = {n_embd}")
 
         if (n_ff := self.find_hparam(["intermediate_size", "n_inner"], optional=True)) is not None:
             self.gguf_writer.add_feed_forward_length(n_ff)
+            print(f"gguf: feed forward length = {n_ff}")
 
         n_head = self.find_hparam(["num_attention_heads", "n_head"])
         self.gguf_writer.add_head_count(n_head)
+        print(f"gguf: head count = {n_head}")
 
         if (n_head_kv := self.hparams.get("num_key_value_heads")) is not None:
             self.gguf_writer.add_head_count_kv(n_head_kv)
+            print(f"gguf: key-value head count = {n_head_kv}")
 
         if (rope_theta := self.hparams.get("rope_theta")) is not None:
             self.gguf_writer.add_rope_freq_base(rope_theta)
+            print(f"gguf: rope theta = {rope_theta}")
         if (f_rms_eps := self.hparams.get("rms_norm_eps")) is not None:
             self.gguf_writer.add_layer_norm_rms_eps(f_rms_eps)
+            print(f"gguf: rms norm epsilon = {f_rms_eps}")
         if (f_norm_eps := self.find_hparam(["layer_norm_eps", "layer_norm_epsilon", "norm_epsilon"], optional=True)) is not None:
             self.gguf_writer.add_layer_norm_eps(f_norm_eps)
+            print(f"gguf: layer norm epsilon = {f_norm_eps}")
         if (n_experts := self.hparams.get("num_local_experts")) is not None:
             self.gguf_writer.add_expert_count(n_experts)
+            print(f"gguf: expert count = {n_experts}")
         if (n_experts_used := self.hparams.get("num_experts_per_tok")) is not None:
             self.gguf_writer.add_expert_used_count(n_experts_used)
+            print(f"gguf: experts used count = {n_experts_used}")
 
         self.gguf_writer.add_file_type(self.ftype)
+        print(f"gguf: file type = {self.ftype}")
 
     def write_tensors(self):
         block_count = self.hparams.get("n_layers", self.hparams.get("num_hidden_layers", self.hparams.get("n_layer")))
@@ -187,6 +200,7 @@ class Model(ABC):
     @classmethod
     def register(cls, *names: str) -> Callable[[AnyModel], AnyModel]:
         assert names
+
         def func(modelcls: type[Model]):
             for name in names:
                 cls._model_classes[name] = modelcls
@@ -1048,6 +1062,21 @@ class MixtralModel(Model):
         self._set_vocab_sentencepiece()
 
 
+@Model.register("GrokForCausalLM")
+class GrokModel(Model):
+    model_arch = gguf.MODEL_ARCH.GROK
+
+    def set_vocab(self):
+        self._set_vocab_sentencepiece()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def set_gguf_parameters(self):
+        super().set_gguf_parameters()
+        self.gguf_writer.add_name("Grok")
+
+
 @Model.register("MiniCPMForCausalLM")
 class MiniCPMModel(Model):
     model_arch = gguf.MODEL_ARCH.MINICPM
@@ -1631,7 +1660,7 @@ in chat mode so that the conversation can end normally.")
                 self.post_write_tensors(tensor_map, name, data_torch)
 
 
-@Model.register("BertModel")
+@Model.register("BertModel", "CamembertModel")
 class BertModel(Model):
     model_arch = gguf.MODEL_ARCH.BERT
 
@@ -1842,6 +1871,141 @@ class GemmaModel(Model):
 @Model.register("Starcoder2ForCausalLM")
 class StarCoder2Model(Model):
     model_arch = gguf.MODEL_ARCH.STARCODER2
+
+
+@Model.register("MambaForCausalLM", "MambaLMHeadModel")
+class MambaModel(Model):
+    model_arch = gguf.MODEL_ARCH.MAMBA
+
+    def set_vocab(self):
+        vocab_size = self.hparams["vocab_size"]
+        # Round vocab size to next multiple of 8
+        pad_vocab = self.hparams.get("pad_vocab_size_multiple", 8)
+        # pad using ceiling division
+        # ref: https://stackoverflow.com/a/17511341/22827863
+        vocab_size = -(vocab_size // -pad_vocab) * pad_vocab
+        self.hparams["vocab_size"] = vocab_size
+
+        if (self.dir_model / "tokenizer.json").is_file():
+            self._set_vocab_gpt2()
+        else:
+            # Use the GPT-NeoX tokenizer when no tokenizer files are present
+            tokenizer_path = Path(sys.path[0]) / "models" / "ggml-vocab-gpt-neox.gguf"
+            print(f"Using tokenizer from '{os.path.relpath(tokenizer_path, os.getcwd())}'")
+            neox_reader = gguf.GGUFReader(tokenizer_path, "r")
+
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.MODEL)
+            self.gguf_writer.add_tokenizer_model(bytes(field.parts[-1]))
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.LIST)
+            self.gguf_writer.add_token_list([bytes(field.parts[i]) for i in field.data][:vocab_size])
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.TOKEN_TYPE)
+            self.gguf_writer.add_token_types([field.parts[i].tolist()[0] for i in field.data][:vocab_size])
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.MERGES)
+            self.gguf_writer.add_token_merges([bytes(field.parts[i]) for i in field.data])
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.BOS_ID)
+            self.gguf_writer.add_bos_token_id(field.parts[-1].tolist()[0])
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.EOS_ID)
+            self.gguf_writer.add_eos_token_id(field.parts[-1].tolist()[0])
+            field = neox_reader.get_field(gguf.Keys.Tokenizer.UNK_ID)
+            self.gguf_writer.add_unk_token_id(field.parts[-1].tolist()[0])
+
+    def set_gguf_parameters(self):
+        d_model = self.find_hparam(["hidden_size", "d_model"])
+        d_conv  = self.find_hparam(["conv_kernel", "d_conv"], optional=True) or 4
+        d_inner = self.find_hparam(["intermediate_size", "d_inner"], optional=True) or 2 * d_model
+        d_state = self.find_hparam(["state_size", "d_state"], optional=True) or 16
+        # ceiling division
+        # ref: https://stackoverflow.com/a/17511341/22827863
+        # ref: https://github.com/state-spaces/mamba/blob/ce59daea3a090d011d6476c6e5b97f6d58ddad8b/mamba_ssm/modules/mamba_simple.py#L58
+        dt_rank = self.find_hparam(["time_step_rank", "dt_rank"], optional=True) or -(d_model // -16)
+        rms_norm_eps = self.find_hparam(["layer_norm_epsilon", "rms_norm_eps"], optional=True) or 1e-5
+
+        # Fail early for models which don't have a block expansion factor of 2
+        assert d_inner == 2 * d_model
+
+        self.gguf_writer.add_name(self.dir_model.name)
+        self.gguf_writer.add_context_length(2**20) # arbitrary value; for those who use the default
+        self.gguf_writer.add_embedding_length(d_model)
+        self.gguf_writer.add_feed_forward_length(0) # unused, but seemingly required when loading
+        self.gguf_writer.add_head_count(0) # unused, but seemingly required when loading
+        self.gguf_writer.add_block_count(self.hparams["n_layer"])
+        self.gguf_writer.add_ssm_conv_kernel(d_conv)
+        self.gguf_writer.add_ssm_inner_size(d_inner)
+        self.gguf_writer.add_ssm_state_size(d_state)
+        self.gguf_writer.add_ssm_time_step_rank(dt_rank)
+        self.gguf_writer.add_layer_norm_rms_eps(rms_norm_eps)
+        self.gguf_writer.add_file_type(self.ftype)
+
+    def write_tensors(self):
+        block_count = self.hparams["n_layer"]
+        tensor_map = gguf.get_tensor_name_map(self.model_arch, block_count)
+
+        tok_embd = None
+        tok_embd_name = gguf.TENSOR_NAMES[gguf.MODEL_TENSOR.TOKEN_EMBD] + ".weight"
+        output_name   = gguf.TENSOR_NAMES[gguf.MODEL_TENSOR.OUTPUT]     + ".weight"
+
+        for name, data_torch in self.get_tensors():
+            old_dtype = data_torch.dtype
+
+            # convert any unsupported data types to float32
+            if data_torch.dtype not in (torch.float16, torch.float32):
+                data_torch = data_torch.to(torch.float32)
+
+            # map tensor names
+            new_name = tensor_map.get_name(name, try_suffixes=(".weight", ".bias"))
+            if new_name is None:
+                print(f"Can not map tensor {name!r}")
+                sys.exit()
+
+            if name.endswith(".A_log"):
+                print("A_log --> A ==> " + new_name)
+                data_torch = -torch.exp(data_torch)
+
+            # assuming token_embd.weight is seen before output.weight
+            if tok_embd is not None and new_name == output_name:
+                if torch.equal(tok_embd, data_torch):
+                    print(f"{output_name} is equivalent to {tok_embd_name}, omitting")
+                    continue
+            if new_name == tok_embd_name:
+                tok_embd = data_torch
+
+            data = data_torch.squeeze().numpy()
+
+            n_dims = len(data.shape)
+            data_dtype = data.dtype
+
+            # if f32 desired, convert any float16 to float32
+            if self.ftype == 0 and data_dtype == np.float16:
+                data = data.astype(np.float32)
+
+            # TODO: Why cant we use these float16 as-is? There should be not reason to store float16 as float32
+            if self.ftype == 1 and data_dtype == np.float16 and n_dims == 1:
+                data = data.astype(np.float32)
+
+            # if f16 desired, convert big float32 2-dim weight tensors to float16
+            if self.ftype == 1 and data_dtype == np.float32 and new_name.removesuffix(".weight").endswith((".ssm_in", ".ssm_out", "token_embd", "output")) and n_dims == 2:
+                data = data.astype(np.float16)
+
+            print(f"{new_name}, n_dims = {n_dims}, {old_dtype} --> {data.dtype}")
+
+            self.gguf_writer.add_tensor(new_name, data)
+
+
+@Model.register("CohereForCausalLM")
+class CommandR2Model(Model):
+    model_arch = gguf.MODEL_ARCH.COMMAND_R
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # max_position_embeddings = 8192 in config.json but model was actually
+        # trained on 128k context length
+        self.hparams["max_position_embeddings"] = self.hparams["model_max_length"]
+
+    def set_gguf_parameters(self):
+        super().set_gguf_parameters()
+        self.gguf_writer.add_logit_scale(self.hparams["logit_scale"])
+        self.gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.NONE)
 
 
 ###### CONVERSION LOGIC ######
