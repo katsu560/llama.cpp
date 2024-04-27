@@ -332,8 +332,8 @@ extern "C" {
     GGML_API float       ggml_fp16_to_fp32(ggml_fp16_t x);
     GGML_API ggml_fp16_t ggml_fp32_to_fp16(float x);
 
-    GGML_API void ggml_fp16_to_fp32_row(const ggml_fp16_t * x, float * y, int n);
-    GGML_API void ggml_fp32_to_fp16_row(const float * x, ggml_fp16_t * y, int n);
+    GGML_API void ggml_fp16_to_fp32_row(const ggml_fp16_t * x, float * y, int64_t n);
+    GGML_API void ggml_fp32_to_fp16_row(const float * x, ggml_fp16_t * y, int64_t n);
 
     struct ggml_object;
     struct ggml_context;
@@ -762,6 +762,8 @@ extern "C" {
     // use this to compute the memory overhead of a tensor
     GGML_API size_t ggml_tensor_overhead(void);
 
+    GGML_API bool ggml_validate_row_data(enum ggml_type type, const void * data, size_t nbytes);
+
     // main
 
     GGML_API struct ggml_context * ggml_init(struct ggml_init_params params);
@@ -1161,13 +1163,11 @@ extern "C" {
             enum ggml_prec       prec);
 
     // indirect matrix multiplication
-    //  ggml_mul_mat_id(ctx, as, ids, id, b) ~= ggml_mul_mat(as[ids[id]], b)
     GGML_API struct ggml_tensor * ggml_mul_mat_id(
             struct ggml_context * ctx,
             struct ggml_tensor  * as,
-            struct ggml_tensor  * ids,
-            int                   id,
-            struct ggml_tensor  * b);
+            struct ggml_tensor  * b,
+            struct ggml_tensor  * ids);
 
     // A: m columns, n rows,
     // B: p columns, n rows,
@@ -2210,9 +2210,9 @@ extern "C" {
             enum ggml_type   type,
                const float * src,
                       void * dst,
-                       int   start,
-                       int   nrows,
-                       int   n_per_row,
+                   int64_t   start,
+                   int64_t   nrows,
+                   int64_t   n_per_row,
                const float * imatrix);
 
     //
@@ -2288,6 +2288,9 @@ extern "C" {
     GGML_API size_t         gguf_get_tensor_offset(const struct gguf_context * ctx, int i);
     GGML_API char *         gguf_get_tensor_name  (const struct gguf_context * ctx, int i);
     GGML_API enum ggml_type gguf_get_tensor_type  (const struct gguf_context * ctx, int i);
+
+    // removes key if it exists
+    GGML_API void gguf_remove_key(struct gguf_context * ctx, const char * key);
 
     // overrides existing values or adds a new one
     GGML_API void gguf_set_val_u8  (struct gguf_context * ctx, const char * key, uint8_t  val);
@@ -2377,8 +2380,8 @@ extern "C" {
 #else
 #define GGML_RESTRICT restrict
 #endif
-    typedef void (*ggml_to_float_t)  (const void  * GGML_RESTRICT x, float * GGML_RESTRICT y, int k);
-    typedef void (*ggml_from_float_t)(const float * GGML_RESTRICT x, void  * GGML_RESTRICT y, int k);
+    typedef void (*ggml_to_float_t)  (const void  * GGML_RESTRICT x, float * GGML_RESTRICT y, int64_t k);
+    typedef void (*ggml_from_float_t)(const float * GGML_RESTRICT x, void  * GGML_RESTRICT y, int64_t k);
     typedef void (*ggml_vec_dot_t)   (int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT x, size_t bx,
                                       const void * GGML_RESTRICT y, size_t by, int nrc);
 
