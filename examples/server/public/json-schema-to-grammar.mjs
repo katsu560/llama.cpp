@@ -1,58 +1,222 @@
 // WARNING: This file was ported from json_schema_to_grammar.py, please fix bugs / add features there first.
-const SPACE_RULE = '" "?';
+const SPACE_RULE = '| " " | "\\n" [ \\t]{0,20}';
 
 function _buildRepetition(itemRule, minItems, maxItems, opts={}) {
+  if (minItems === 0 && maxItems === 1) {
+    return `${itemRule}?`;
+  }
+
+
   const separatorRule = opts.separatorRule ?? '';
   const itemRuleIsLiteral = opts.itemRuleIsLiteral ?? false
 
   if (separatorRule === '') {
-    if (minItems === 0 && maxItems === 1) {
-      return `${itemRule}?`;
-    } else if (minItems === 1 && maxItems === undefined) {
+    if (minItems === 1 && maxItems === undefined) {
       return `${itemRule}+`;
-    }
-  }
-
-  let result = '';
-  if (minItems > 0) {
-    if (itemRuleIsLiteral && separatorRule === '') {
-      result = `"${itemRule.slice(1, -1).repeat(minItems)}"`;
+    } else if (minItems === 0 && maxItems === undefined) {
+      return `${itemRule}*`;
     } else {
-      result = Array.from({ length: minItems }, () => itemRule)
-        .join(separatorRule !== '' ? ` ${separatorRule} ` : ' ');
+      return `${itemRule}{${minItems},${maxItems !== undefined ? maxItems : ''}}`;
     }
   }
 
-  const optRepetitions = (upToN, prefixWithSep=false) => {
-    const content = separatorRule !== '' && prefixWithSep ? `${separatorRule} ${itemRule}` : itemRule;
-    if (upToN === 0) {
-      return '';
-    } else if (upToN === 1) {
-      return `(${content})?`;
-    } else if (separatorRule !== '' && !prefixWithSep) {
-      return `(${content} ${optRepetitions(upToN - 1, true)})?`;
-    } else {
-      return Array.from({ length: upToN }, () => `(${content}`).join(' ').trim() + Array.from({ length: upToN }, () => ')?').join('');
-    }
-  };
+  const result = itemRule + ' ' + _buildRepetition(`(${separatorRule} ${itemRule})`, minItems > 0 ? minItems - 1 : 0, maxItems !== undefined ? maxItems - 1 : undefined);
+  return minItems === 0 ? `(${result})?` : result;
+}
 
-  if (minItems > 0 && maxItems !== minItems) {
-    result += ' ';
+function _generateMinMaxInt(minValue, maxValue, out, decimalsLeft = 16, topLevel = true) {
+  const hasMin = minValue !== null;
+  const hasMax = maxValue !== null;
+
+  function digitRange(fromChar, toChar) {
+      out.push("[");
+      if (fromChar === toChar) {
+          out.push(fromChar);
+      } else {
+          out.push(fromChar);
+          out.push("-");
+          out.push(toChar);
+      }
+      out.push("]");
   }
 
-  if (maxItems !== undefined) {
-    result += optRepetitions(maxItems - minItems, minItems > 0);
-  } else {
-    const itemOperator = `(${separatorRule !== '' ? separatorRule + ' ' : ''}${itemRule})`;
-
-    if (minItems === 0 && separatorRule !== '') {
-      result = `(${itemRule} ${itemOperator}*)?`;
-    } else {
-      result += `${itemOperator}*`;
-    }
+  function moreDigits(minDigits, maxDigits) {
+      out.push("[0-9]");
+      if (minDigits === maxDigits && minDigits === 1) {
+          return;
+      }
+      out.push("{");
+      out.push(minDigits.toString());
+      if (maxDigits !== minDigits) {
+          out.push(",");
+          if (maxDigits !== Number.MAX_SAFE_INTEGER) {
+              out.push(maxDigits.toString());
+          }
+      }
+      out.push("}");
   }
 
-  return result;
+  function uniformRange(fromStr, toStr) {
+      let i = 0;
+      while (i < fromStr.length && fromStr[i] === toStr[i]) {
+          i++;
+      }
+      if (i > 0) {
+          out.push("\"");
+          out.push(fromStr.slice(0, i));
+          out.push("\"");
+      }
+      if (i < fromStr.length) {
+          if (i > 0) {
+              out.push(" ");
+          }
+          const subLen = fromStr.length - i - 1;
+          if (subLen > 0) {
+              const fromSub = fromStr.slice(i + 1);
+              const toSub = toStr.slice(i + 1);
+              const subZeros = "0".repeat(subLen);
+              const subNines = "9".repeat(subLen);
+
+              let toReached = false;
+              out.push("(");
+              if (fromSub === subZeros) {
+                  digitRange(fromStr[i], String.fromCharCode(toStr.charCodeAt(i) - 1));
+                  out.push(" ");
+                  moreDigits(subLen, subLen);
+              } else {
+                  out.push("[");
+                  out.push(fromStr[i]);
+                  out.push("] ");
+                  out.push("(");
+                  uniformRange(fromSub, subNines);
+                  out.push(")");
+                  if (fromStr.charCodeAt(i) < toStr.charCodeAt(i) - 1) {
+                      out.push(" | ");
+                      if (toSub === subNines) {
+                          digitRange(String.fromCharCode(fromStr.charCodeAt(i) + 1), toStr[i]);
+                          toReached = true;
+                      } else {
+                          digitRange(String.fromCharCode(fromStr.charCodeAt(i) + 1), String.fromCharCode(toStr.charCodeAt(i) - 1));
+                      }
+                      out.push(" ");
+                      moreDigits(subLen, subLen);
+                  }
+              }
+              if (!toReached) {
+                  out.push(" | ");
+                  digitRange(toStr[i], toStr[i]);
+                  out.push(" ");
+                  uniformRange(subZeros, toSub);
+              }
+              out.push(")");
+          } else {
+              out.push("[");
+              out.push(fromStr[i]);
+              out.push("-");
+              out.push(toStr[i]);
+              out.push("]");
+          }
+      }
+  }
+
+  if (hasMin && hasMax) {
+      if (minValue < 0 && maxValue < 0) {
+          out.push("\"-\" (");
+          _generateMinMaxInt(-maxValue, -minValue, out, decimalsLeft, true);
+          out.push(")");
+          return;
+      }
+
+      if (minValue < 0) {
+          out.push("\"-\" (");
+          _generateMinMaxInt(0, -minValue, out, decimalsLeft, true);
+          out.push(") | ");
+          minValue = 0;
+      }
+
+      let minS = minValue.toString();
+      const maxS = maxValue.toString();
+      const minDigits = minS.length;
+      const maxDigits = maxS.length;
+
+      for (let digits = minDigits; digits < maxDigits; digits++) {
+          uniformRange(minS, "9".repeat(digits));
+          minS = "1" + "0".repeat(digits);
+          out.push(" | ");
+      }
+      uniformRange(minS, maxS);
+      return;
+  }
+
+  const lessDecimals = Math.max(decimalsLeft - 1, 1);
+
+  if (hasMin) {
+      if (minValue < 0) {
+          out.push("\"-\" (");
+          _generateMinMaxInt(null, -minValue, out, decimalsLeft, false);
+          out.push(") | [0] | [1-9] ");
+          moreDigits(0, decimalsLeft - 1);
+      } else if (minValue === 0) {
+          if (topLevel) {
+              out.push("[0] | [1-9] ");
+              moreDigits(0, lessDecimals);
+          } else {
+              moreDigits(1, decimalsLeft);
+          }
+      } else if (minValue <= 9) {
+          const c = minValue.toString();
+          const range_start = topLevel ? '1' : '0';
+          if (c > range_start) {
+              digitRange(range_start, String.fromCharCode(c.charCodeAt(0) - 1));
+              out.push(" ");
+              moreDigits(1, lessDecimals);
+              out.push(" | ");
+          }
+          digitRange(c, "9");
+          out.push(" ");
+          moreDigits(0, lessDecimals);
+      } else {
+          const minS = minValue.toString();
+          const length = minS.length;
+          const c = minS[0];
+
+          if (c > "1") {
+              digitRange(topLevel ? "1" : "0", String.fromCharCode(c.charCodeAt(0) - 1));
+              out.push(" ");
+              moreDigits(length, lessDecimals);
+              out.push(" | ");
+          }
+          digitRange(c, c);
+          out.push(" (");
+          _generateMinMaxInt(parseInt(minS.slice(1)), null, out, lessDecimals, false);
+          out.push(")");
+          if (c < "9") {
+              out.push(" | ");
+              digitRange(String.fromCharCode(c.charCodeAt(0) + 1), "9");
+              out.push(" ");
+              moreDigits(length - 1, lessDecimals);
+          }
+      }
+      return;
+  }
+
+  if (hasMax) {
+      if (maxValue >= 0) {
+          if (topLevel) {
+              out.push("\"-\" [1-9] ");
+              moreDigits(0, lessDecimals);
+              out.push(" | ");
+          }
+          _generateMinMaxInt(0, maxValue, out, decimalsLeft, true);
+      } else {
+          out.push("\"-\" (");
+          _generateMinMaxInt(-maxValue, null, out, decimalsLeft, false);
+          out.push(")");
+      }
+      return;
+  }
+
+  throw new Error("At least one of minValue or maxValue must be set");
 }
 
 class BuiltinRule {
@@ -62,27 +226,25 @@ class BuiltinRule {
   }
 }
 
-const UP_TO_15_DIGITS = _buildRepetition('[0-9]', 0, 15);
-
 const PRIMITIVE_RULES = {
   boolean        : new BuiltinRule('("true" | "false") space', []),
-  'decimal-part' : new BuiltinRule('[0-9] ' + UP_TO_15_DIGITS, []),
-  'integral-part': new BuiltinRule('[0-9] | [1-9] ' + UP_TO_15_DIGITS, []),
+  'decimal-part' : new BuiltinRule('[0-9]{1,16}', []),
+  'integral-part': new BuiltinRule('[0] | [1-9] [0-9]{0,15}', []),
   number         : new BuiltinRule('("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space', ['integral-part', 'decimal-part']),
   integer        : new BuiltinRule('("-"? integral-part) space', ['integral-part']),
   value          : new BuiltinRule('object | array | string | number | boolean | null', ['object', 'array', 'string', 'number', 'boolean', 'null']),
   object         : new BuiltinRule('"{" space ( string ":" space value ("," space string ":" space value)* )? "}" space', ['string', 'value']),
   array          : new BuiltinRule('"[" space ( value ("," space value)* )? "]" space', ['value']),
-  uuid           : new BuiltinRule('"\\"" ' + [8, 4, 4, 4, 12].map(n => [...new Array(n)].map(_ => '[0-9a-fA-F]').join('')).join(' "-" ') + ' "\\"" space', []),
-  char           : new BuiltinRule(`[^"\\\\] | "\\\\" (["\\\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])`, []),
+  uuid           : new BuiltinRule('"\\"" [0-9a-fA-F]{8} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{12} "\\"" space', []),
+  char           : new BuiltinRule(`[^"\\\\\\x7F\\x00-\\x1F] | [\\\\] (["\\\\bfnrt] | "u" [0-9a-fA-F]{4})`, []),
   string         : new BuiltinRule(`"\\"" char* "\\"" space`, ['char']),
   null           : new BuiltinRule('"null" space', []),
 };
 
 // TODO: support "uri", "email" string formats
 const STRING_FORMAT_RULES = {
-  'date'            : new BuiltinRule('[0-9] [0-9] [0-9] [0-9] "-" ( "0" [1-9] | "1" [0-2] ) "-" ( \"0\" [1-9] | [1-2] [0-9] | "3" [0-1] )', []),
-  'time'            : new BuiltinRule('([01] [0-9] | "2" [0-3]) ":" [0-5] [0-9] ":" [0-5] [0-9] ( "." [0-9] [0-9] [0-9] )? ( "Z" | ( "+" | "-" ) ( [01] [0-9] | "2" [0-3] ) ":" [0-5] [0-9] )', []),
+  'date'            : new BuiltinRule('[0-9]{4} "-" ( "0" [1-9] | "1" [0-2] ) "-" ( \"0\" [1-9] | [1-2] [0-9] | "3" [0-1] )', []),
+  'time'            : new BuiltinRule('([01] [0-9] | "2" [0-3]) ":" [0-5] [0-9] ":" [0-5] [0-9] ( "." [0-9]{3} )? ( "Z" | ( "+" | "-" ) ( [01] [0-9] | "2" [0-3] ) ":" [0-5] [0-9] )', []),
   'date-time'       : new BuiltinRule('date "T" time', ['date', 'time']),
   'date-string'     : new BuiltinRule('"\\"" date "\\"" space', ['date']),
   'time-string'     : new BuiltinRule('"\\"" time "\\"" space', ['time']),
@@ -468,6 +630,24 @@ export class SchemaConverter {
       const minLen = schema.minLength || 0;
       const maxLen = schema.maxLength;
       return this._addRule(ruleName, '"\\\"" ' + _buildRepetition(charRuleName, minLen, maxLen) + ' "\\\"" space');
+    } else if (schemaType === 'integer' && ('minimum' in schema || 'exclusiveMinimum' in schema || 'maximum' in schema || 'exclusiveMaximum' in schema)) {
+      let minValue = null;
+      let maxValue = null;
+      if ('minimum' in schema) {
+        minValue = schema.minimum;
+      } else if ('exclusiveMinimum' in schema) {
+        minValue = schema.exclusiveMinimum + 1;
+      }
+      if ('maximum' in schema) {
+        maxValue = schema.maximum;
+      } else if ('exclusiveMaximum' in schema) {
+        maxValue = schema.exclusiveMaximum - 1;
+      }
+
+      const out = ["("];
+      _generateMinMaxInt(minValue, maxValue, out);
+      out.push(") space");
+      return this._addRule(ruleName, out.join(''));
     } else if ((schemaType === 'object') || (Object.keys(schema).length === 0)) {
       return this._addRule(ruleName, this._addPrimitive('object', PRIMITIVE_RULES['object']));
     } else {

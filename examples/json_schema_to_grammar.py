@@ -4,86 +4,217 @@ import itertools
 import json
 import re
 import sys
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-def _build_repetition(item_rule, min_items, max_items, separator_rule=None, item_rule_is_literal=False):
+
+def _build_repetition(item_rule, min_items, max_items, separator_rule=None):
+
+    if min_items == 0 and max_items == 1:
+        return f'{item_rule}?'
+
     if not separator_rule:
-        if min_items == 0 and max_items == 1:
-            return f'{item_rule}?'
-        elif min_items == 1 and max_items is None:
+        if min_items == 1 and max_items is None:
             return f'{item_rule}+'
-
-    result = ''
-
-    if min_items > 0:
-        if item_rule_is_literal and separator_rule is None:
-            result = '"' + (item_rule[1:-1] * min_items) + '"'
+        elif min_items == 0 and max_items is None:
+            return f'{item_rule}*'
         else:
-            result = (f' {separator_rule} ' if separator_rule else ' ').join([item_rule] * min_items)
+            return f'{item_rule}{{{min_items},{max_items if max_items is not None else ""}}}'
 
-    def opt_repetitions(up_to_n, prefix_with_sep=False):
-        '''
-            - n=4, no sep:             '(a (a (a (a)?)?)?)?'
-            - n=4, sep=',', prefix:    '("," a ("," a ("," a ("," a)?)?)?)?'
-            - n=4, sep=',', no prefix: '(a ("," a ("," a ("," a)?)?)?)?'
-        '''
+    result = item_rule + ' ' + _build_repetition(f'({separator_rule} {item_rule})', min_items - 1 if min_items > 0 else 0, max_items - 1 if max_items is not None else None)
+    return f'({result})?' if min_items == 0 else result
 
-        content = f'{separator_rule} {item_rule}' if prefix_with_sep and separator_rule else item_rule
-        if up_to_n == 0:
-            return ''
-        elif up_to_n == 1:
-            return f'({content})?'
-        elif separator_rule and not prefix_with_sep:
-            return f'({content} {opt_repetitions(up_to_n - 1, prefix_with_sep=True)})?'
+def _generate_min_max_int(min_value: Optional[int], max_value: Optional[int], out: list, decimals_left: int = 16, top_level: bool = True):
+    has_min = min_value != None
+    has_max = max_value != None
+
+    def digit_range(from_char: str, to_char: str):
+        out.append("[")
+        if from_char == to_char:
+            out.append(from_char)
         else:
-            return (f'({content} ' * up_to_n).rstrip() + (')?' * up_to_n)
+            out.append(from_char)
+            out.append("-")
+            out.append(to_char)
+        out.append("]")
 
-    if min_items > 0 and max_items != min_items:
-        result += ' '
+    def more_digits(min_digits: int, max_digits: int):
+        out.append("[0-9]")
+        if min_digits == max_digits and min_digits == 1:
+            return
+        out.append("{")
+        out.append(str(min_digits))
+        if max_digits != min_digits:
+            out.append(",")
+            if max_digits != sys.maxsize:
+                out.append(str(max_digits))
+        out.append("}")
 
-    if max_items is not None:
-        result += opt_repetitions(max_items - min_items, prefix_with_sep=min_items > 0)
-    else:
-        item_operator = f'({separator_rule + " " if separator_rule else ""}{item_rule})'
+    def uniform_range(from_str: str, to_str: str):
+        i = 0
+        while i < len(from_str) and from_str[i] == to_str[i]:
+            i += 1
+        if i > 0:
+            out.append("\"")
+            out.append(from_str[:i])
+            out.append("\"")
+        if i < len(from_str):
+            if i > 0:
+                out.append(" ")
+            sub_len = len(from_str) - i - 1
+            if sub_len > 0:
+                from_sub = from_str[i+1:]
+                to_sub = to_str[i+1:]
+                sub_zeros = "0" * sub_len
+                sub_nines = "9" * sub_len
 
-        if min_items == 0 and separator_rule:
-            result = f'({item_rule} {item_operator}*)?'
+                to_reached = False
+                out.append("(")
+                if from_sub == sub_zeros:
+                    digit_range(from_str[i], chr(ord(to_str[i]) - 1))
+                    out.append(" ")
+                    more_digits(sub_len, sub_len)
+                else:
+                    out.append("[")
+                    out.append(from_str[i])
+                    out.append("] ")
+                    out.append("(")
+                    uniform_range(from_sub, sub_nines)
+                    out.append(")")
+                    if ord(from_str[i]) < ord(to_str[i]) - 1:
+                        out.append(" | ")
+                        if to_sub == sub_nines:
+                            digit_range(chr(ord(from_str[i]) + 1), to_str[i])
+                            to_reached = True
+                        else:
+                            digit_range(chr(ord(from_str[i]) + 1), chr(ord(to_str[i]) - 1))
+                        out.append(" ")
+                        more_digits(sub_len, sub_len)
+                if not to_reached:
+                    out.append(" | ")
+                    digit_range(to_str[i], to_str[i])
+                    out.append(" ")
+                    uniform_range(sub_zeros, to_sub)
+                out.append(")")
+            else:
+                out.append("[")
+                out.append(from_str[i])
+                out.append("-")
+                out.append(to_str[i])
+                out.append("]")
+
+    if has_min and has_max:
+        if min_value < 0 and max_value < 0:
+            out.append("\"-\" (")
+            _generate_min_max_int(-max_value, -min_value, out, decimals_left, top_level=True)
+            out.append(")")
+            return
+
+        if min_value < 0:
+            out.append("\"-\" (")
+            _generate_min_max_int(0, -min_value, out, decimals_left, top_level=True)
+            out.append(") | ")
+            min_value = 0
+
+        min_s = str(min_value)
+        max_s = str(max_value)
+        min_digits = len(min_s)
+        max_digits = len(max_s)
+
+        for digits in range(min_digits, max_digits):
+            uniform_range(min_s, "9" * digits)
+            min_s = "1" + "0" * digits
+            out.append(" | ")
+        uniform_range(min_s, max_s)
+        return
+
+    less_decimals = max(decimals_left - 1, 1)
+
+    if has_min:
+        if min_value < 0:
+            out.append("\"-\" (")
+            _generate_min_max_int(None, -min_value, out, decimals_left, top_level=False)
+            out.append(") | [0] | [1-9] ")
+            more_digits(0, decimals_left - 1)
+        elif min_value == 0:
+            if top_level:
+                out.append("[0] | [1-9] ")
+                more_digits(0, less_decimals)
+            else:
+                more_digits(1, decimals_left)
+        elif min_value <= 9:
+            c = str(min_value)
+            range_start = '1' if top_level else '0'
+            if c > range_start:
+                digit_range(range_start, chr(ord(c) - 1))
+                out.append(" ")
+                more_digits(1, less_decimals)
+                out.append(" | ")
+            digit_range(c, "9")
+            out.append(" ")
+            more_digits(0, less_decimals)
         else:
-            result += f'{item_operator}*'
+            min_s = str(min_value)
+            length = len(min_s)
+            c = min_s[0]
 
-    return result
+            if c > "1":
+                digit_range("1" if top_level else "0", chr(ord(c) - 1))
+                out.append(" ")
+                more_digits(length, less_decimals)
+                out.append(" | ")
+            digit_range(c, c)
+            out.append(" (")
+            _generate_min_max_int(int(min_s[1:]), None, out, less_decimals, top_level=False)
+            out.append(")")
+            if c < "9":
+                out.append(" | ")
+                digit_range(chr(ord(c) + 1), "9")
+                out.append(" ")
+                more_digits(length - 1, less_decimals)
+        return
 
+    if has_max:
+        if max_value >= 0:
+            if top_level:
+                out.append("\"-\" [1-9] ")
+                more_digits(0, less_decimals)
+                out.append(" | ")
+            _generate_min_max_int(0, max_value, out, decimals_left, top_level=True)
+        else:
+            out.append("\"-\" (")
+            _generate_min_max_int(-max_value, None, out, decimals_left, top_level=False)
+            out.append(")")
+        return
+
+    raise RuntimeError("At least one of min_value or max_value must be set")
 
 class BuiltinRule:
     def __init__(self, content: str, deps: list = None):
         self.content = content
         self.deps = deps or []
 
-_up_to_15_digits = _build_repetition('[0-9]', 0, 15)
-
-# whitespace is constrained to a single space char to prevent model "running away" in
-# whitespace. Also maybe improves generation quality?
-SPACE_RULE = '" "?'
+# Constraining spaces to prevent model "running away".
+SPACE_RULE = '| " " | "\\n" [ \\t]{0,20}'
 
 PRIMITIVE_RULES = {
     'boolean'      : BuiltinRule('("true" | "false") space', []),
-    'decimal-part' : BuiltinRule('[0-9] ' + _up_to_15_digits, []),
-    'integral-part': BuiltinRule('[0-9] | [1-9] ' + _up_to_15_digits, []),
+    'decimal-part' : BuiltinRule('[0-9]{1,16}', []),
+    'integral-part': BuiltinRule('[0] | [1-9] [0-9]{0,15}', []),
     'number'       : BuiltinRule('("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space', ['integral-part', 'decimal-part']),
     'integer'      : BuiltinRule('("-"? integral-part) space', ['integral-part']),
     'value'        : BuiltinRule('object | array | string | number | boolean | null', ['object', 'array', 'string', 'number', 'boolean', 'null']),
     'object'       : BuiltinRule('"{" space ( string ":" space value ("," space string ":" space value)* )? "}" space', ['string', 'value']),
     'array'        : BuiltinRule('"[" space ( value ("," space value)* )? "]" space', ['value']),
-    'uuid'         : BuiltinRule(r'"\"" ' + ' "-" '.join('[0-9a-fA-F]' * n for n in [8, 4, 4, 4, 12]) + r' "\"" space', []),
-    'char'         : BuiltinRule(r'[^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])', []),
+    'uuid'         : BuiltinRule(r'"\"" [0-9a-fA-F]{8} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{4} "-" [0-9a-fA-F]{12} "\"" space', []),
+    'char'         : BuiltinRule(r'[^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})', []),
     'string'       : BuiltinRule(r'"\"" char* "\"" space', ['char']),
     'null'         : BuiltinRule('"null" space', []),
 }
 
 # TODO: support "uri", "email" string formats
 STRING_FORMAT_RULES = {
-    'date'            : BuiltinRule('[0-9] [0-9] [0-9] [0-9] "-" ( "0" [1-9] | "1" [0-2] ) "-" ( \"0\" [1-9] | [1-2] [0-9] | "3" [0-1] )', []),
-    'time'            : BuiltinRule('([01] [0-9] | "2" [0-3]) ":" [0-5] [0-9] ":" [0-5] [0-9] ( "." [0-9] [0-9] [0-9] )? ( "Z" | ( "+" | "-" ) ( [01] [0-9] | "2" [0-3] ) ":" [0-5] [0-9] )', []),
+    'date'            : BuiltinRule('[0-9]{4} "-" ( "0" [1-9] | "1" [0-2] ) "-" ( \"0\" [1-9] | [1-2] [0-9] | "3" [0-1] )', []),
+    'time'            : BuiltinRule('([01] [0-9] | "2" [0-3]) ":" [0-5] [0-9] ":" [0-5] [0-9] ( "." [0-9]{3} )? ( "Z" | ( "+" | "-" ) ( [01] [0-9] | "2" [0-3] ) ":" [0-5] [0-9] )', []),
     'date-time'       : BuiltinRule('date "T" time', ['date', 'time']),
     'date-string'     : BuiltinRule('"\\"" date "\\"" space', ['date']),
     'time-string'     : BuiltinRule('"\\"" time "\\"" space', ['time']),
@@ -333,7 +464,7 @@ class SchemaConverter:
                             sub_rule_ids[sub] = id
                         sub = id
 
-                    seq[-1] = (_build_repetition(f'"{sub}"' if sub_is_literal else sub, min_times, max_times, item_rule_is_literal=sub_is_literal), False)
+                    seq[-1] = (_build_repetition(f'"{sub}"' if sub_is_literal else sub, min_times, max_times), False)
                 else:
                     literal = ''
                     while i < length:
@@ -465,6 +596,24 @@ class SchemaConverter:
 
             return self._add_rule(rule_name, r'"\"" ' + _build_repetition(char_rule, min_len, max_len) + r' "\"" space')
 
+        elif schema_type in (None, 'integer') and \
+                ('minimum' in schema or 'exclusiveMinimum' in schema or 'maximum' in schema or 'exclusiveMaximum' in schema):
+            min_value = None
+            max_value = None
+            if 'minimum' in schema:
+                min_value = schema['minimum']
+            elif 'exclusiveMinimum' in schema:
+                min_value = schema['exclusiveMinimum'] + 1
+            if 'maximum' in schema:
+                max_value = schema['maximum']
+            elif 'exclusiveMaximum' in schema:
+                max_value = schema['exclusiveMaximum'] - 1
+
+            out = ["("]
+            _generate_min_max_int(min_value, max_value, out)
+            out.append(") space")
+            return self._add_rule(rule_name, ''.join(out))
+
         elif (schema_type == 'object') or (len(schema) == 0):
             return self._add_rule(rule_name, self._add_primitive('object', PRIMITIVE_RULES['object']))
 
@@ -556,7 +705,7 @@ class SchemaConverter:
 def main(args_in = None):
     parser = argparse.ArgumentParser(
         description='''
-            Generates a grammar (suitable for use in ./main) that produces JSON conforming to a
+            Generates a grammar (suitable for use in ./llama-cli) that produces JSON conforming to a
             given JSON schema. Only a subset of JSON schema features are supported; more may be
             added in the future.
         ''',

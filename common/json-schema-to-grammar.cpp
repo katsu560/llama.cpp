@@ -16,92 +16,282 @@ static std::string join(Iterator begin, Iterator end, const std::string & separa
 
 static std::string repeat(const std::string & str, size_t n);
 
-static std::string build_repetition(const std::string & item_rule, int min_items, int max_items, const std::string & separator_rule = "", bool item_rule_is_literal = false) {
+static std::string build_repetition(const std::string & item_rule, int min_items, int max_items, const std::string & separator_rule = "") {
+    auto has_max = max_items != std::numeric_limits<int>::max();
+
+    if (min_items == 0 && max_items == 1) {
+        return item_rule + "?";
+    }
+
     if (separator_rule.empty()) {
-        if (min_items == 0 && max_items == 1) {
-            return item_rule + "?";
-        } else if (min_items == 1 && max_items == std::numeric_limits<int>::max()) {
+        if (min_items == 1 && !has_max) {
             return item_rule + "+";
-        }
-    }
-
-    std::string result;
-    if (min_items > 0) {
-        if (item_rule_is_literal && separator_rule.empty()) {
-            result = "\"" + repeat(std::string(item_rule.begin() + 1, item_rule.end() - 1), min_items) + "\"";
+        } else if (min_items == 0 && !has_max) {
+            return item_rule + "*";
         } else {
-            std::vector<std::string> items(min_items, item_rule);
-            result = join(items.begin(), items.end(), separator_rule.empty() ? " " : " " + separator_rule + " ");
+            return item_rule + "{" + std::to_string(min_items) + "," + (has_max ? std::to_string(max_items) : "") + "}";
         }
     }
 
-    std::function<std::string(int, bool)> opt_repetitions = [&](int up_to_n, bool prefix_with_sep) -> std::string {
-        auto content = prefix_with_sep && !separator_rule.empty() ? separator_rule + " " + item_rule : item_rule;
-
-        if (up_to_n == 0) {
-            return "";
-        } else if (up_to_n == 1) {
-            return "(" + content + ")?";
-        } else if (!separator_rule.empty() && !prefix_with_sep) {
-            return "(" + content + " " + opt_repetitions(up_to_n - 1, true) + ")?";
-        } else {
-            std::string res = repeat("(" + content + " ", up_to_n);
-            // strip trailing space
-            res = res.substr(0, res.length() - 1);
-            res += repeat(")?", up_to_n);
-            return res;
-        }
-    };
-
-    if (min_items > 0 && max_items != min_items) {
-        result += " ";
+    auto result = item_rule + " " + build_repetition("(" + separator_rule + " " + item_rule + ")", min_items == 0 ? 0 : min_items - 1, has_max ? max_items - 1 : max_items);
+    if (min_items == 0) {
+        result = "(" + result + ")?";
     }
-
-    if (max_items != std::numeric_limits<int>::max()) {
-        result += opt_repetitions(max_items - min_items, min_items > 0);
-    } else {
-        std::string item_operator = "(" + (separator_rule.empty() ? "" : separator_rule + " ") + item_rule + ")";
-        if (min_items == 0 && !separator_rule.empty()) {
-            result = "(" + item_rule + " " + item_operator + "*)?";
-        } else {
-            result += item_operator + "*";
-        }
-    }
-
     return result;
 }
 
-const std::string SPACE_RULE = "\" \"?";
+/* Minimalistic replacement for std::string_view, which is only available from C++17 onwards */
+class string_view {
+    const std::string & _str;
+    const size_t _start;
+    const size_t _end;
+public:
+    string_view(const std::string & str, size_t start = 0, size_t end  = std::string::npos) : _str(str), _start(start), _end(end == std::string::npos ? str.length() : end) {}
+
+    size_t size() const {
+        return _end - _start;
+    }
+
+    size_t length() const {
+        return size();
+    }
+
+    operator std::string() const {
+        return str();
+    }
+
+    std::string str() const {
+        return _str.substr(_start, _end - _start);
+    }
+
+    string_view substr(size_t pos, size_t len = std::string::npos) const {
+        return string_view(_str, _start + pos, len == std::string::npos ? _end : _start + pos + len);
+    }
+
+    char operator[](size_t pos) const {
+        auto index = _start + pos;
+        if (index >= _end) {
+            throw std::out_of_range("string_view index out of range");
+        }
+        return _str[_start + pos];
+    }
+
+    bool operator==(const string_view & other) const {
+        std::string this_str = *this;
+        std::string other_str = other;
+        return this_str == other_str;
+    }
+};
+
+static void _build_min_max_int(int min_value, int max_value, std::stringstream & out, int decimals_left = 16, bool top_level = true) {
+    auto has_min = min_value != std::numeric_limits<int>::min();
+    auto has_max = max_value != std::numeric_limits<int>::max();
+
+    auto digit_range = [&](char from, char to) {
+        out << "[";
+        if (from == to) {
+            out << from;
+        } else {
+            out << from << "-" << to;
+        }
+        out << "]";
+    };
+    auto more_digits = [&](int min_digits, int max_digits) {
+        out << "[0-9]";
+        if (min_digits == max_digits && min_digits == 1) {
+            return;
+        }
+        out << "{";
+        out << min_digits;
+        if (max_digits != min_digits) {
+            out << ",";
+            if (max_digits != std::numeric_limits<int>::max()) {
+                out << max_digits;
+            }
+        }
+        out << "}";
+    };
+    std::function<void(const string_view &, const string_view &)> uniform_range =
+        [&](const string_view & from, const string_view & to) {
+            size_t i = 0;
+            while (i < from.length() && i < to.length() && from[i] == to[i]) {
+                i++;
+            }
+            if (i > 0) {
+                out << "\"" << from.substr(0, i).str() << "\"";
+            }
+            if (i < from.length() && i < to.length()) {
+                if (i > 0) {
+                    out << " ";
+                }
+                auto sub_len = from.length() - i - 1;
+                if (sub_len > 0) {
+                    auto from_sub = from.substr(i + 1);
+                    auto to_sub = to.substr(i + 1);
+                    auto sub_zeros = repeat("0", sub_len);
+                    auto sub_nines = repeat("9", sub_len);
+
+                    auto to_reached = false;
+                    out << "(";
+                    if (from_sub == sub_zeros) {
+                        digit_range(from[i], to[i] - 1);
+                        out << " ";
+                        more_digits(sub_len, sub_len);
+                    } else {
+                        out << "[" << from[i] << "] ";
+                        out << "(";
+                        uniform_range(from_sub, sub_nines);
+                        out << ")";
+                        if (from[i] < to[i] - 1) {
+                            out << " | ";
+                            if (to_sub == sub_nines) {
+                                digit_range(from[i] + 1, to[i]);
+                                to_reached = true;
+                            } else {
+                                digit_range(from[i] + 1, to[i] - 1);
+                            }
+                            out << " ";
+                            more_digits(sub_len, sub_len);
+                        }
+                    }
+                    if (!to_reached) {
+                        out << " | ";
+                        digit_range(to[i], to[i]);
+                        out << " ";
+                        uniform_range(sub_zeros, to_sub);
+                    }
+                    out << ")";
+                } else {
+                    out << "[" << from[i] << "-" << to[i] << "]";
+                }
+            }
+        };
+
+    if (has_min && has_max) {
+        if (min_value < 0 && max_value < 0) {
+            out << "\"-\" (";
+            _build_min_max_int(-max_value, -min_value, out, decimals_left, /* top_level= */ true);
+            out << ")";
+            return;
+        }
+
+        if (min_value < 0) {
+            out << "\"-\" (";
+            _build_min_max_int(0, -min_value, out, decimals_left, /* top_level= */ true);
+            out << ") | ";
+            min_value = 0;
+        }
+
+        auto min_s = std::to_string(min_value);
+        auto max_s = std::to_string(max_value);
+        auto min_digits = min_s.length();
+        auto max_digits = max_s.length();
+
+        for (auto digits = min_digits; digits < max_digits; digits++) {
+            uniform_range(min_s, repeat("9", digits));
+            min_s = "1" + repeat("0", digits);
+            out << " | ";
+        }
+        uniform_range(min_s, max_s);
+        return;
+    }
+
+    auto less_decimals = std::max(decimals_left - 1, 1);
+
+    if (has_min) {
+        if (min_value < 0) {
+            out << "\"-\" (";
+            _build_min_max_int(std::numeric_limits<int>::min(), -min_value, out, decimals_left, /* top_level= */ false);
+            out << ") | [0] | [1-9] ";
+            more_digits(0, decimals_left - 1);
+        } else if (min_value == 0) {
+            if (top_level) {
+                out << "[0] | [1-9] ";
+                more_digits(0, less_decimals);
+            } else {
+                more_digits(1, decimals_left);
+            }
+        } else if (min_value <= 9) {
+            char c = '0' + min_value;
+            auto range_start = top_level ? '1' : '0';
+            if (c > range_start) {
+                digit_range(range_start, c - 1);
+                out << " ";
+                more_digits(1, less_decimals);
+                out << " | ";
+            }
+            digit_range(c, '9');
+            out << " ";
+            more_digits(0, less_decimals);
+        } else {
+            auto min_s = std::to_string(min_value);
+            auto len = min_s.length();
+            auto c = min_s[0];
+
+            if (c > '1') {
+                digit_range(top_level ? '1' : '0', c - 1);
+                out << " ";
+                more_digits(len, less_decimals);
+                out << " | ";
+            }
+            digit_range(c, c);
+            out << " (";
+            _build_min_max_int(std::stoi(min_s.substr(1)), std::numeric_limits<int>::max(), out, less_decimals, /* top_level= */ false);
+            out << ")";
+            if (c < '9') {
+                out << " | ";
+                digit_range(c + 1, '9');
+                out << " ";
+                more_digits(len - 1, less_decimals);
+            }
+        }
+        return;
+    }
+
+    if (has_max) {
+        if (max_value >= 0) {
+            if (top_level) {
+                out << "\"-\" [1-9] ";
+                more_digits(0, less_decimals);
+                out << " | ";
+            }
+            _build_min_max_int(0, max_value, out, decimals_left, /* top_level= */ true);
+        } else {
+            out << "\"-\" (";
+            _build_min_max_int(-max_value, std::numeric_limits<int>::max(), out, decimals_left, /* top_level= */ false);
+            out << ")";
+        }
+        return;
+    }
+
+    throw std::runtime_error("At least one of min_value or max_value must be set");
+}
+
+const std::string SPACE_RULE = "| \" \" | \"\\n\" [ \\t]{0,20}";
 
 struct BuiltinRule {
     std::string content;
     std::vector<std::string> deps;
 };
 
-const std::string _up_to_15_digits = build_repetition("[0-9]", 0, 15);
-
 std::unordered_map<std::string, BuiltinRule> PRIMITIVE_RULES = {
     {"boolean", {"(\"true\" | \"false\") space", {}}},
-    {"decimal-part", {"[0-9] " + _up_to_15_digits, {}}},
-    {"integral-part", {"[0-9] | [1-9] " + _up_to_15_digits, {}}},
+    {"decimal-part", {"[0-9]{1,16}", {}}},
+    {"integral-part", {"[0] | [1-9] [0-9]{0,15}", {}}},
     {"number", {"(\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)? space", {"integral-part", "decimal-part"}}},
     {"integer", {"(\"-\"? integral-part) space", {"integral-part"}}},
     {"value", {"object | array | string | number | boolean | null", {"object", "array", "string", "number", "boolean", "null"}}},
     {"object", {"\"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? \"}\" space", {"string", "value"}}},
     {"array", {"\"[\" space ( value (\",\" space value)* )? \"]\" space", {"value"}}},
-    {"uuid", {"\"\\\"\" [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] "
-                "\"-\" [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] "
-                "\"-\" [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] "
-                "\"-\" [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] "
-                "\"-\" [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F] \"\\\"\" space", {}}},
-    {"char",   {"[^\"\\\\] | \"\\\\\" ([\"\\\\/bfnrt] | \"u\" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])", {}}},
+    {"uuid", {"\"\\\"\" [0-9a-fA-F]{8} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{12} \"\\\"\" space", {}}},
+    {"char",   {"[^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})", {}}},
     {"string", {"\"\\\"\" char* \"\\\"\" space", {"char"}}},
     {"null", {"\"null\" space", {}}},
 };
 
 std::unordered_map<std::string, BuiltinRule> STRING_FORMAT_RULES = {
-    {"date", {"[0-9] [0-9] [0-9] [0-9] \"-\" ( \"0\" [1-9] | \"1\" [0-2] ) \"-\" ( \"0\" [1-9] | [1-2] [0-9] | \"3\" [0-1] )", {}}},
-    {"time", {"([01] [0-9] | \"2\" [0-3]) \":\" [0-5] [0-9] \":\" [0-5] [0-9] ( \".\" [0-9] [0-9] [0-9] )? ( \"Z\" | ( \"+\" | \"-\" ) ( [01] [0-9] | \"2\" [0-3] ) \":\" [0-5] [0-9] )", {}}},
+    {"date", {"[0-9]{4} \"-\" ( \"0\" [1-9] | \"1\" [0-2] ) \"-\" ( \"0\" [1-9] | [1-2] [0-9] | \"3\" [0-1] )", {}}},
+    {"time", {"([01] [0-9] | \"2\" [0-3]) \":\" [0-5] [0-9] \":\" [0-5] [0-9] ( \".\" [0-9]{3} )? ( \"Z\" | ( \"+\" | \"-\" ) ( [01] [0-9] | \"2\" [0-3] ) \":\" [0-5] [0-9] )", {}}},
     {"date-time", {"date \"T\" time", {"date", "time"}}},
     {"date-string", {"\"\\\"\" date \"\\\"\" space", {"date"}}},
     {"time-string", {"\"\\\"\" time \"\\\"\" space", {"time"}}},
@@ -196,7 +386,6 @@ static std::string format_literal(const std::string & literal) {
     });
     return "\"" + escaped + "\"";
 }
-
 
 class SchemaConverter {
 private:
@@ -385,8 +574,7 @@ private:
                         sub_is_literal ? "\"" + sub + "\"" : sub,
                         min_times,
                         max_times,
-                        "",
-                        sub_is_literal
+                        ""
                     );
                     seq.back().second = false;
                 } else {
@@ -724,6 +912,24 @@ public:
             int min_len = schema.contains("minLength") ? schema["minLength"].get<int>() : 0;
             int max_len = schema.contains("maxLength") ? schema["maxLength"].get<int>() : std::numeric_limits<int>::max();
             return _add_rule(rule_name, "\"\\\"\" " + build_repetition(char_rule, min_len, max_len) + " \"\\\"\" space");
+        } else if (schema_type == "integer" && (schema.contains("minimum") || schema.contains("exclusiveMinimum") || schema.contains("maximum") || schema.contains("exclusiveMaximum"))) {
+            int min_value = std::numeric_limits<int>::min();
+            int max_value = std::numeric_limits<int>::max();
+            if (schema.contains("minimum")) {
+                min_value = schema["minimum"].get<int>();
+            } else if (schema.contains("exclusiveMinimum")) {
+                min_value = schema["exclusiveMinimum"].get<int>() + 1;
+            }
+            if (schema.contains("maximum")) {
+                max_value = schema["maximum"].get<int>();
+            } else if (schema.contains("exclusiveMaximum")) {
+                max_value = schema["exclusiveMaximum"].get<int>() - 1;
+            }
+            std::stringstream out;
+            out << "(";
+            _build_min_max_int(min_value, max_value, out);
+            out << ") space";
+            return _add_rule(rule_name, out.str());
         } else if (schema.empty() || schema_type == "object") {
             return _add_rule(rule_name, _add_primitive("object", PRIMITIVE_RULES.at("object")));
         } else {
